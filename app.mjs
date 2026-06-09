@@ -276,17 +276,56 @@ function evaluateSignals() {
   const vol = state.vol;
 
   const macroFired =
-    (macro.yieldTrend === 'flat' || macro.yieldTrend === 'falling') &&
-    macro.usdJpyTrend !== 'usdSurging' &&
-    macro.usdJpyTrend !== 'missing';
+  macro.yieldTrend === 'falling' &&
+  (macro.usdJpyTrend === 'stable' || macro.usdJpyTrend === 'usdFalling');
 
-  const breadthFired =
-    breadth.semisBreadth === 'equalOutperform' &&
-    breadth.chinaTech !== 'weak';
+const breadthFired =
+  breadth.semisBreadth === 'equalOutperform' &&
+  breadth.chinaTech === 'recovering';
 
-  const volFired =
-    (vol.vixRegime === 'falling' || vol.vixRegime === 'near') &&
-    vol.eemTrend !== 'falling';
+const volFired =
+  vol.vixRegime === 'falling' &&
+  vol.eemTrend === 'rising';
+  // ------------------------------
+// CONFIDENCE SCORING
+// ------------------------------
+let macroScore = 0;
+if (macro.yieldTrend === 'falling' && 
+    (macro.usdJpyTrend === 'stable' || macro.usdJpyTrend === 'usdFalling')) {
+  macroScore = 100;
+} else if (macro.yieldTrend === 'falling') {
+  macroScore = 60;
+} else if (macro.yieldTrend === 'flat' && macro.usdJpyTrend === 'stable') {
+  macroScore = 30;
+}
+
+let breadthScore = 0;
+if (breadth.semisBreadth === 'equalOutperform' && breadth.chinaTech === 'recovering') {
+  breadthScore = 100;
+} else if (breadth.semisBreadth === 'equalOutperform' || breadth.chinaTech === 'recovering') {
+  breadthScore = 50;
+}
+
+let volScore = 0;
+if (vol.vixRegime === 'falling' && vol.eemTrend === 'rising') {
+  volScore = 100;
+} else if (vol.vixRegime === 'falling' && vol.eemTrend === 'flat') {
+  volScore = 50;
+}
+
+const confidenceScore = Math.round((macroScore + breadthScore + volScore) / 3);
+
+// ------------------------------
+// REGIME CLASSIFICATION
+// ------------------------------
+let regime = 'Risk-Off';
+if (confidenceScore >= 70) regime = 'Risk-On';
+else if (confidenceScore >= 40) regime = 'Neutral';
+
+// Expose to UI
+document.getElementById('confidenceScore').textContent = confidenceScore + '%';
+document.getElementById('regimeText').textContent = regime;
+
 
   setStatus('macro', macroFired);
   setStatus('breadth', breadthFired);
