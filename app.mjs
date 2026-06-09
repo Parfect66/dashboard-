@@ -1,240 +1,278 @@
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #0b1020;
-  color: #f5f5f5;
-  margin: 0;
-  padding: 20px;
+// FINNHUB KEY
+const FINNHUB_KEY = 'd8k39o9r01qjgd6qtjvgd8k39o9r01qjgd6qtk00';
+
+const state = { macro: null, breadth: null, vol: null };
+let missingSymbols = [];
+
+// ------------------------------
+// UI HELPERS
+// ------------------------------
+function toggleExplainer(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
 }
 
-.container {
-  max-width: 1100px;
-  margin: 0 auto;
+function setError(msg) {
+  document.getElementById('errorBox').textContent = msg || '';
 }
 
-h1 {
-  margin: 0 0 10px;
+// ------------------------------
+// REFRESH ALL
+// ------------------------------
+async function refreshAll() {
+  setError('');
+  missingSymbols = [];
+  state.macro = null;
+  state.breadth = null;
+  state.vol = null;
+
+  await Promise.all([
+    fetchMacroBlock(),
+    fetchBreadthBlock(),
+    fetchVolBlock()
+  ]);
+
+  evaluateSignals();
+  document.getElementById('lastUpdated').textContent =
+    'Last updated: ' + new Date().toLocaleString();
 }
 
-.subtitle {
-  color: #a3a9c4;
-  font-size: 13px;
-  margin-bottom: 20px;
+// ------------------------------
+// FINNHUB QUOTES
+// ------------------------------
+async function fetchFinnhubQuote(symbol) {
+  const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data || typeof data.c !== 'number') throw new Error('Invalid quote');
+    return { price: data.c, previousClose: data.pc };
+  } catch {
+    return null;
+  }
 }
 
-.section-title {
-  margin-top: 24px;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #8f95b5;
+async function getQuote(symbol) {
+  const q = await fetchFinnhubQuote(symbol);
+  if (q) return q;
+  missingSymbols.push(symbol);
+  return null;
 }
 
-.summary {
-  background: #151a2c;
-  border-radius: 10px;
-  padding: 14px 16px;
-  border: 1px solid #252b42;
-  margin-top: 12px;
-  font-size: 14px;
+// ------------------------------
+// FX (exchangerate.host)
+// ------------------------------
+async function getFx() {
+  const url = `https://api.exchangerate.host/latest?base=USD&symbols=JPY`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data || !data.rates || !data.rates.JPY) throw new Error('Invalid FX data');
+
+    return { price: data.rates.JPY };
+  } catch (e) {
+    console.error('FX error:', e);
+    return null;
+  }
 }
 
-.summary span {
-  display: inline-block;
-  margin-right: 10px;
+// ------------------------------
+// MACRO BLOCK
+// ------------------------------
+async function fetchMacroBlock() {
+  const ief = await getQuote('IEF');
+  const fx = await getFx();
+
+  if (!ief) {
+    missingSymbols.push('IEF');
+    state.macro = null;
+    return;
+  }
+
+  const current = ief.price;
+  const prev = ief.previousClose;
+  const change = current - prev;
+  const pct = (change / prev) * 100;
+
+  let yieldTrend = 'flat';
+  if (change > 0.15) yieldTrend = 'rising';
+  if (change < -0.15) yieldTrend = 'falling';
+
+  document.getElementById('iefValue').textContent = current.toFixed(2);
+  document.getElementById('iefChange').textContent =
+    `${change >= 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)`;
+  document.getElementById('yieldTrendText').textContent = yieldTrend;
+  document.getElementById('iefSource').textContent = 'Source: Finnhub';
+
+  if (fx) {
+    document.getElementById('usdJpyText').textContent = fx.price.toFixed(3);
+    document.getElementById('fxSource').textContent = 'Source: exchangerate.host';
+  } else {
+    document.getElementById('usdJpyText').textContent = 'n/a';
+    document.getElementById('fxSource').textContent = 'Source: n/a';
+  }
+
+  state.macro = { yieldTrend };
 }
 
-.pill {
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  border: 1px solid #3a4060;
+// ------------------------------
+// BREADTH BLOCK
+// ------------------------------
+async function fetchBreadthBlock() {
+  const soxx = await getQuote('SOXX');
+  const xsd = await getQuote('XSD');
+  const kweb = await getQuote('KWEB');
+
+  let semisBreadth = 'neutral';
+  if (soxx && xsd && soxx.previousClose && xsd.previousClose) {
+    const soxxRet = (soxx.price - soxx.previousClose) / soxx.previousClose;
+    const xsdRet = (xsd.price - xsd.previousClose) / xsd.previousClose;
+    const diff = xsdRet - soxxRet;
+
+    if (diff > 0.005) semisBreadth = 'equalOutperform';
+    else if (diff < -0.005) semisBreadth = 'equalUnderperform';
+  } else {
+    missingSymbols.push('SOXX/XSD');
+  }
+
+  document.getElementById('semisBreadthText').textContent = semisBreadth;
+  document.getElementById('semisSource').textContent = 'Source: Finnhub';
+
+  let chinaTech = 'sideways';
+  if (kweb && kweb.previousClose) {
+    const ret = (kweb.price - kweb.previousClose) / kweb.previousClose;
+    if (ret > 0.01) chinaTech = 'recovering';
+    else if (ret < -0.01) chinaTech = 'weak';
+  } else {
+    missingSymbols.push('KWEB');
+  }
+
+  document.getElementById('chinaTechText').textContent = chinaTech;
+  document.getElementById('kwebSource').textContent = 'Source: Finnhub';
+
+  state.breadth = { semisBreadth, chinaTech };
+
+  document.getElementById('breadthExplainer').innerHTML = `
+    <div><strong>Semis breadth:</strong> ${semisBreadth}</div>
+    <div><strong>China tech:</strong> ${chinaTech}</div>
+  `;
 }
 
-.pill-ok {
-  color: #b9ffcf;
-  border-color: #2f7a4a;
+// ------------------------------
+// VOL BLOCK
+// ------------------------------
+async function fetchVolBlock() {
+  const vixy = await getQuote('VIXY');
+  const eem = await getQuote('EEM');
+
+  let vixRegime = 'near';
+
+  if (vixy && vixy.previousClose) {
+    const current = vixy.price;
+    const prev = vixy.previousClose;
+    const change = current - prev;
+
+    if (change < -0.5) vixRegime = 'falling';
+    if (change > 0.5) vixRegime = 'rising';
+
+    document.getElementById('vixyValue').textContent = current.toFixed(2);
+    document.getElementById('vixyChange').textContent =
+      `${change >= 0 ? '+' : ''}${change.toFixed(2)}`;
+    document.getElementById('vixRegimeText').textContent = vixRegime;
+  } else {
+    document.getElementById('vixyValue').textContent = 'n/a';
+    document.getElementById('vixyChange').textContent = 'n/a';
+    document.getElementById('vixRegimeText').textContent = 'unknown';
+    missingSymbols.push('VIXY');
+  }
+
+  document.getElementById('vixySource').textContent = 'Source: Finnhub';
+
+  let eemTrend = 'flat';
+  if (eem && eem.previousClose) {
+    const ret = (eem.price - eem.previousClose) / eem.previousClose;
+    if (ret > 0.007) eemTrend = 'rising';
+    else if (ret < -0.007) eemTrend = 'falling';
+  } else {
+    missingSymbols.push('EEM');
+  }
+
+  document.getElementById('eemText').textContent = eemTrend;
+  document.getElementById('eemSource').textContent = 'Source: Finnhub';
+
+  state.vol = { vixRegime, eemTrend };
+
+  document.getElementById('volExplainer').innerHTML = `
+    <div><strong>VIXY trend:</strong> ${vixRegime}</div>
+    <div><strong>EEM trend:</strong> ${eemTrend}</div>
+  `;
 }
 
-.pill-risk {
-  color: #ffd1b3;
-  border-color: #a85a2f;
-}
+// ------------------------------
+// EVALUATE SIGNALS
+// ------------------------------
+function evaluateSignals() {
+  const coreMissing = missingSymbols.filter(s =>
+    ['IEF', 'SOXX/XSD', 'KWEB', 'VIXY', 'EEM'].includes(s)
+  );
 
-.pill-wait {
-  color: #ffb3b3;
-  border-color: #a83f3f;
-}
+  if (!state.macro || !state.breadth || !state.vol || coreMissing.length > 0) {
+    setStatus('macro', false);
+    setStatus('breadth', false);
+    setStatus('vol', false);
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-  margin-top: 20px;
-}
+    document.getElementById('macroStatusText').textContent = 'WAIT';
+    document.getElementById('breadthStatusText').textContent = 'WAIT';
+    document.getElementById('volStatusText').textContent = 'WAIT';
 
-.card {
-  background: #151a2c;
-  border-radius: 10px;
-  padding: 16px 18px;
-  border: 1px solid #252b42;
-}
+    const advice = document.getElementById('trancheAdvice');
+    advice.textContent = 'Data incomplete — no signals today';
+    advice.className = 'pill pill-wait';
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
+    if (coreMissing.length > 0) {
+      setError('Missing data for: ' + [...new Set(coreMissing)].join(', '));
+    } else {
+      setError('Some data did not load — signals disabled.');
+    }
+    return;
+  }
 
-.tag {
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
+  const macro = state.macro;
+  const breadth = state.breadth;
+  const vol = state.vol;
 
-.tag-macro {
-  background: #1b3b5a;
-  color: #9fd0ff;
-}
+  const macroFired =
+    (macro.yieldTrend === 'flat' || macro.yieldTrend === 'falling');
 
-.tag-breadth {
-  background: #2b3b1b;
-  color: #c6ff9f;
-}
+  const breadthFired =
+    breadth.semisBreadth === 'equalOutperform' &&
+    breadth.chinaTech !== 'weak';
 
-.tag-vol {
-  background: #5a2b1b;
-  color: #ffc79f;
-}
+  const volFired =
+    (vol.vixRegime === 'falling' || vol.vixRegime === 'near') &&
+    vol.eemTrend !== 'falling';
 
-.status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
+  setStatus('macro', macroFired);
+  setStatus('breadth', breadthFired);
+  setStatus('vol', volFired);
 
-.status-wait {
-  background: #3a2b2b;
-  color: #ffb3b3;
-}
+  document.getElementById('macroStatusText').textContent = macroFired ? 'FIRED' : 'WAIT';
+  document.getElementById('breadthStatusText').textContent = breadthFired ? 'FIRED' : 'WAIT';
+  document.getElementById('volStatusText').textContent = volFired ? 'FIRED' : 'WAIT';
 
-.status-fired {
-  background: #1f3a2b;
-  color: #b9ffcf;
-}
+  const advice = document.getElementById('trancheAdvice');
 
-.metric-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  margin: 2px 0;
-}
-
-.metric-label {
-  color: #a3a9c4;
-}
-
-.metric-value {
-  font-weight: 600;
-}
-
-.data-source {
-  font-size: 11px;
-  color: #7c82a0;
-  margin-top: 2px;
-}
-
-.note {
-  font-size: 12px;
-  color: #9aa0c0;
-  margin-top: 6px;
-}
-
-.explainer-toggle {
-  cursor: pointer;
-  font-size: 12px;
-  color: #9aa0c0;
-  margin-top: 8px;
-  user-select: none;
-}
-
-.explainer-content {
-  display: none;
-  margin-top: 8px;
-  padding: 10px;
-  background: #1b2038;
-  border-radius: 8px;
-  border: 1px solid #2a3048;
-  font-size: 13px;
-}
-
-button {
-  background: #2f5bff;
-  border: none;
-  border-radius: 999px;
-  padding: 6px 14px;
-  color: #fff;
-  font-size: 12px;
-  cursor: pointer;
-  margin-top: 8px;
-  margin-right: 6px;
-}
-
-button:hover {
-  background: #2446c4;
-}
-
-button.danger {
-  background: #a83f3f;
-}
-
-.log-box {
-  background: #151a2c;
-  border: 1px solid #252b42;
-  border-radius: 10px;
-  padding: 14px;
-  margin-top: 12px;
-  font-size: 13px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.log-entry {
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #2a3048;
-}
-
-.small {
-  font-size: 11px;
-  color: #7c82a0;
-}
-
-.error {
-  color: #ffb3b3;
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-#apiStatus {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #9aa0c0;
-  white-space: pre-line;
-}
-
-.ok {
-  color: #b9ffcf;
-}
-
-.fail {
-  color: #ffb3b3;
-}
-
-.footer {
-  margin-top: 30px;
-  font-size: 11px;
-  color: #7c82a0;
-}
+  if (!macroFired && !breadthFired && !volFired) {
+    advice.textContent = 'No tranche unlocked – stay defensive';
+    advice.className = 'pill pill-wait';
+  } else if (macroFired && !breadthFired && !volFired) {
+    advice.textContent = 'Tranche 1 unlocked – £150–200k into Asia';
+    advice.className = 'pill pill-ok';
+  } else if (macroFired && breadthFired && !volFired) {
+    advice.textContent = 'Tranche 1 + 2 unlocked – up to ~£400k deployed';
+    advice.className = 'pill pill-ok';
+  } else if (macroFired && breadthFired && volFired) {
+    advice.textContent = 'All 3 tranches unlocked – up to £550k growth sleeve available';
+    advice.class
