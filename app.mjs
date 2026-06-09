@@ -353,4 +353,67 @@ function renderLog() {
   }
 
   box.innerHTML = log.map(entry =>
-    `<div class="log-entry">Tranche ${entry.tr
+    `<div class="log-entry">Tranche ${entry.tranche} deployed on <strong>${entry.time}</strong></div>`
+  ).join('');
+}
+
+// ------------------------------
+// TEST API KEYS
+// ------------------------------
+async function testApiKeys() {
+  const statusEl = document.getElementById('apiStatus');
+  statusEl.textContent = 'Testing…';
+
+  const tests = [
+    {
+      name: 'Finnhub quote (IEF)',
+      fn: () => fetch(`https://finnhub.io/api/v1/quote?symbol=IEF&token=${FINNHUB_KEY}`)
+    },
+    {
+      name: 'Finnhub quote (VIXY)',
+      fn: () => fetch(`https://finnhub.io/api/v1/quote?symbol=VIXY&token=${FINNHUB_KEY}`)
+    },
+    {
+      name: 'FX (USD/JPY via exchangerate.host)',
+      fn: () => fetch(`https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6`)
+    }
+  ];
+
+  const results = await Promise.all(tests.map(async t => {
+    try {
+      const res = await t.fn();
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return { name: t.name, ok: true };
+    } catch (e) {
+      return { name: t.name, ok: false, err: e.message };
+    }
+  }));
+
+  const lines = results.map(r =>
+    `${r.ok ? '✅' : '❌'} ${r.name}${r.ok ? '' : ' – ' + r.err}`
+  );
+
+  statusEl.innerHTML = lines
+    .map(l => l.includes('✅') ? `<span class="ok">${l}</span>` : `<span class="fail">${l}</span>`)
+    .join('\n');
+}
+
+// ------------------------------
+// INIT + EXPOSE FUNCTIONS
+// ------------------------------
+renderLog();
+refreshAll();
+
+window.testApiKeys = testApiKeys;
+window.refreshAll = refreshAll;
+window.logTranche = logTranche;
+window.resetLog = resetLog;
+window.toggleExplainer = toggleExplainer;
+
+// ------------------------------
+// AUTO‑REFRESH EVERY 15 MINUTES
+// ------------------------------
+setInterval(() => {
+  console.log("Auto‑refresh triggered");
+  refreshAll();
+}, 15 * 60 * 1000);
