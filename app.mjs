@@ -357,7 +357,7 @@ async function testApiKeys() {
     },
     {
       name: 'FX (USD/JPY via exchangerate.host)',
-      fn: () => fetch(`https://api.exchangerate.host/latest?base=USD&symbols=JPY`)
+      fn: () => fetch(`https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6`)
     }
   ];
 
