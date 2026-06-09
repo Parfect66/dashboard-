@@ -3,7 +3,7 @@ const FINNHUB_KEY = 'd8k39o9r01qjgd6qtjvgd8k39o9r01qjgd6qtk00';
 
 const state = { macro: null, breadth: null, vol: null };
 let missingSymbols = [];
-let prevFxPrice = null; // For FX trend detection
+let prevFxPrice = null;
 
 // ------------------------------
 // UI HELPERS
@@ -89,7 +89,7 @@ async function getFx() {
 }
 
 // ------------------------------
-// MACRO BLOCK (with HARD FX GATING)
+// MACRO BLOCK (strict)
 // ------------------------------
 async function fetchMacroBlock() {
   const ief = await getQuote('IEF');
@@ -116,17 +116,6 @@ async function fetchMacroBlock() {
   document.getElementById('yieldTrendText').textContent = yieldTrend;
   document.getElementById('iefSource').textContent = 'Source: Finnhub';
 
-  if (fx) {
-    document.getElementById('usdJpyText').textContent = fx.price.toFixed(3);
-    document.getElementById('fxSource').textContent = `Source: ${fx.source}`;
-  } else {
-    document.getElementById('usdJpyText').textContent = 'n/a';
-    document.getElementById('fxSource').textContent = 'Source: unavailable';
-  }
-
-  // ------------------------------
-  // HARD FX GATING LOGIC
-  // ------------------------------
   let usdJpyTrend = 'missing';
 
   if (fx && fx.price) {
@@ -139,6 +128,12 @@ async function fetchMacroBlock() {
     else usdJpyTrend = 'stable';
 
     prevFxPrice = fx.price;
+
+    document.getElementById('usdJpyText').textContent = fx.price.toFixed(3);
+    document.getElementById('fxSource').textContent = `Source: ${fx.source}`;
+  } else {
+    document.getElementById('usdJpyText').textContent = 'n/a';
+    document.getElementById('fxSource').textContent = 'Source: unavailable';
   }
 
   state.macro = { yieldTrend, usdJpyTrend };
@@ -150,7 +145,7 @@ async function fetchMacroBlock() {
 }
 
 // ------------------------------
-// BREADTH BLOCK
+// BREADTH BLOCK (strict)
 // ------------------------------
 async function fetchBreadthBlock() {
   const soxx = await getQuote('SOXX');
@@ -193,7 +188,7 @@ async function fetchBreadthBlock() {
 }
 
 // ------------------------------
-// VOL BLOCK
+// VOL BLOCK (strict)
 // ------------------------------
 async function fetchVolBlock() {
   const vixy = await getQuote('VIXY');
@@ -243,7 +238,7 @@ async function fetchVolBlock() {
 }
 
 // ------------------------------
-// EVALUATE SIGNALS
+// EVALUATE SIGNALS (strict + scoring + drift)
 // ------------------------------
 function evaluateSignals() {
   const coreMissing = missingSymbols.filter(s =>
@@ -275,57 +270,18 @@ function evaluateSignals() {
   const breadth = state.breadth;
   const vol = state.vol;
 
+  // STRICT SIGNALS
   const macroFired =
-  macro.yieldTrend === 'falling' &&
-  (macro.usdJpyTrend === 'stable' || macro.usdJpyTrend === 'usdFalling');
+    macro.yieldTrend === 'falling' &&
+    (macro.usdJpyTrend === 'stable' || macro.usdJpyTrend === 'usdFalling');
 
-const breadthFired =
-  breadth.semisBreadth === 'equalOutperform' &&
-  breadth.chinaTech === 'recovering';
+  const breadthFired =
+    breadth.semisBreadth === 'equalOutperform' &&
+    breadth.chinaTech === 'recovering';
 
-const volFired =
-  vol.vixRegime === 'falling' &&
-  vol.eemTrend === 'rising';
-  // ------------------------------
-// CONFIDENCE SCORING
-// ------------------------------
-let macroScore = 0;
-if (macro.yieldTrend === 'falling' && 
-    (macro.usdJpyTrend === 'stable' || macro.usdJpyTrend === 'usdFalling')) {
-  macroScore = 100;
-} else if (macro.yieldTrend === 'falling') {
-  macroScore = 60;
-} else if (macro.yieldTrend === 'flat' && macro.usdJpyTrend === 'stable') {
-  macroScore = 30;
-}
-
-let breadthScore = 0;
-if (breadth.semisBreadth === 'equalOutperform' && breadth.chinaTech === 'recovering') {
-  breadthScore = 100;
-} else if (breadth.semisBreadth === 'equalOutperform' || breadth.chinaTech === 'recovering') {
-  breadthScore = 50;
-}
-
-let volScore = 0;
-if (vol.vixRegime === 'falling' && vol.eemTrend === 'rising') {
-  volScore = 100;
-} else if (vol.vixRegime === 'falling' && vol.eemTrend === 'flat') {
-  volScore = 50;
-}
-
-const confidenceScore = Math.round((macroScore + breadthScore + volScore) / 3);
-
-// ------------------------------
-// REGIME CLASSIFICATION
-// ------------------------------
-let regime = 'Risk-Off';
-if (confidenceScore >= 70) regime = 'Risk-On';
-else if (confidenceScore >= 40) regime = 'Neutral';
-
-// Expose to UI
-document.getElementById('confidenceScore').textContent = confidenceScore + '%';
-document.getElementById('regimeText').textContent = regime;
-
+  const volFired =
+    vol.vixRegime === 'falling' &&
+    vol.eemTrend === 'rising';
 
   setStatus('macro', macroFired);
   setStatus('breadth', breadthFired);
@@ -335,6 +291,78 @@ document.getElementById('regimeText').textContent = regime;
   document.getElementById('breadthStatusText').textContent = breadthFired ? 'FIRED' : 'WAIT';
   document.getElementById('volStatusText').textContent = volFired ? 'FIRED' : 'WAIT';
 
+  // ------------------------------
+  // CONFIDENCE SCORING
+  // ------------------------------
+  let macroScore = 0;
+  if (macroFired) macroScore = 100;
+  else if (macro.yieldTrend === 'falling') macroScore = 60;
+  else if (macro.yieldTrend === 'flat' && macro.usdJpyTrend === 'stable') macroScore = 30;
+
+  let breadthScore = 0;
+  if (breadthFired) breadthScore = 100;
+  else if (breadth.semisBreadth === 'equalOutperform' || breadth.chinaTech === 'recovering')
+    breadthScore = 50;
+
+  let volScore = 0;
+  if (volFired) volScore = 100;
+  else if (vol.vixRegime === 'falling' && vol.eemTrend === 'flat') volScore = 50;
+
+  const confidenceScore = Math.round((macroScore + breadthScore + volScore) / 3);
+
+  document.getElementById('confidenceScore').textContent = confidenceScore + '%';
+
+  // ------------------------------
+  // REGIME CLASSIFICATION
+  // ------------------------------
+  let regime = 'Risk-Off';
+  if (confidenceScore >= 70) regime = 'Risk-On';
+  else if (confidenceScore >= 40) regime = 'Neutral';
+
+  document.getElementById('regimeText').textContent = regime;
+
+  // ------------------------------
+  // SIGNAL DRIFT (with colour coding)
+  // ------------------------------
+  const prev = JSON.parse(localStorage.getItem('signalScores') || '{}');
+
+  const drift = {
+    macro: macroScore - (prev.macroScore || 0),
+    breadth: breadthScore - (prev.breadthScore || 0),
+    vol: volScore - (prev.volScore || 0)
+  };
+
+  let driftLeader = 'None';
+  let driftValue = 0;
+
+  for (const key of ['macro', 'breadth', 'vol']) {
+    if (drift[key] > driftValue) {
+      driftLeader = key;
+      driftValue = drift[key];
+    }
+  }
+
+  let driftHtml = '';
+
+  if (driftLeader === 'None') {
+    driftHtml = `<span style="color:#888;">None (cooling)</span>`;
+  } else if (driftValue > 0) {
+    driftHtml = `<span style="color:#00c853;">${driftLeader} (+${driftValue})</span>`;
+  } else {
+    driftHtml = `<span style="color:#d50000;">${driftLeader} (${driftValue})</span>`;
+  }
+
+  document.getElementById('signalDrift').innerHTML = driftHtml;
+
+  localStorage.setItem('signalScores', JSON.stringify({
+    macroScore,
+    breadthScore,
+    volScore
+  }));
+
+  // ------------------------------
+  // TRANCHE ADVICE
+  // ------------------------------
   const advice = document.getElementById('trancheAdvice');
 
   if (!macroFired && !breadthFired && !volFired) {
@@ -405,7 +433,8 @@ async function testApiKeys() {
       fn: () => fetch(`https://finnhub.io/api/v1/quote?symbol=IEF&token=${FINNHUB_KEY}`)
     },
     {
-      name: 'Finnhub quote (VIXY)',
+      name: 'Finnhub
+              name: 'Finnhub quote (VIXY)',
       fn: () => fetch(`https://finnhub.io/api/v1/quote?symbol=VIXY&token=${FINNHUB_KEY}`)
     },
     {
@@ -429,8 +458,11 @@ async function testApiKeys() {
   );
 
   statusEl.innerHTML = lines
-    .map(l => l.includes('✅') ? `<span class="ok">${l}</span>` : `<span class="fail">${l}</span>`)
-    .join('\n');
+    .map(l => l.includes('✅')
+      ? `<span class="ok">${l}</span>`
+      : `<span class="fail">${l}</span>`
+    )
+    .join('<br>');
 }
 
 // ------------------------------
@@ -449,6 +481,6 @@ window.toggleExplainer = toggleExplainer;
 // AUTO‑REFRESH EVERY 15 MINUTES
 // ------------------------------
 setInterval(() => {
-  console.log("Auto‑refresh triggered");
+  console.log("Auto-refresh triggered");
   refreshAll();
 }, 15 * 60 * 1000);
