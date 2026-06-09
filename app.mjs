@@ -61,19 +61,39 @@ async function getQuote(symbol) {
 }
 
 // ------------------------------
-// FX (exchangerate.host)
+// BULLETPROOF FX (3‑source fallback)
 // ------------------------------
 async function getFx() {
-  const url = `https://api.exchangerate.host/latest?base=USD&symbols=JPY`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (!data || !data.rates || !data.rates.JPY) throw new Error('Invalid FX data');
+  const primary = `https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6`;
+  const fallback1 = `https://api.exchangerate.host/ecb?base=USD&symbols=JPY`;
+  const fallback2 = `https://query1.finance.yahoo.com/v8/finance/chart/JPY=X?interval=1d`;
 
-    return { price: data.rates.JPY };
+  try {
+    // Primary
+    let res = await fetch(primary);
+    if (res.ok) {
+      let data = await res.json();
+      if (data?.rates?.JPY) return { price: data.rates.JPY, source: "exchangerate.host" };
+    }
+
+    // ECB fallback
+    res = await fetch(fallback1);
+    if (res.ok) {
+      let data = await res.json();
+      if (data?.rates?.JPY) return { price: data.rates.JPY, source: "ECB" };
+    }
+
+    // Yahoo fallback
+    res = await fetch(fallback2);
+    if (res.ok) {
+      let data = await res.json();
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price) return { price, source: "Yahoo Finance" };
+    }
+
+    throw new Error("All FX sources failed");
   } catch (e) {
-    console.error('FX error:', e);
+    console.error("FX error:", e);
     return null;
   }
 }
@@ -108,10 +128,10 @@ async function fetchMacroBlock() {
 
   if (fx) {
     document.getElementById('usdJpyText').textContent = fx.price.toFixed(3);
-    document.getElementById('fxSource').textContent = 'Source: exchangerate.host';
+    document.getElementById('fxSource').textContent = `Source: ${fx.source}`;
   } else {
     document.getElementById('usdJpyText').textContent = 'n/a';
-    document.getElementById('fxSource').textContent = 'Source: n/a';
+    document.getElementById('fxSource').textContent = 'Source: unavailable';
   }
 
   state.macro = { yieldTrend };
@@ -361,7 +381,13 @@ async function testApiKeys() {
 }
 
 // ------------------------------
-// INIT
+// INIT + EXPOSE FUNCTIONS
 // ------------------------------
 renderLog();
 refreshAll();
+
+// Expose functions to HTML buttons
+window.testApiKeys = testApiKeys;
+window.refreshAll = refreshAll;
+window.logTranche = logTranche;
+window.resetLog = resetLog;
