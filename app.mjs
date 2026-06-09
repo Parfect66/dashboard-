@@ -61,12 +61,11 @@ async function getQuote(symbol) {
 }
 
 // ------------------------------
-// BULLETPROOF FX (3‑source fallback)
+// FX (2‑source fallback, no CORS)
 // ------------------------------
 async function getFx() {
   const primary = `https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6`;
   const fallback1 = `https://api.exchangerate.host/ecb?base=USD&symbols=JPY`;
-  const fallback2 = `https://query1.finance.yahoo.com/v8/finance/chart/JPY=X?interval=1d`;
 
   try {
     // Primary
@@ -81,14 +80,6 @@ async function getFx() {
     if (res.ok) {
       let data = await res.json();
       if (data?.rates?.JPY) return { price: data.rates.JPY, source: "ECB" };
-    }
-
-    // Yahoo fallback
-    res = await fetch(fallback2);
-    if (res.ok) {
-      let data = await res.json();
-      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (price) return { price, source: "Yahoo Finance" };
     }
 
     throw new Error("All FX sources failed");
@@ -386,8 +377,8 @@ async function testApiKeys() {
 renderLog();
 refreshAll();
 
-// Expose functions to HTML buttons
 window.testApiKeys = testApiKeys;
 window.refreshAll = refreshAll;
 window.logTranche = logTranche;
 window.resetLog = resetLog;
+window.toggleExplainer = toggleExplainer;
