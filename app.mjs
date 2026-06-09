@@ -382,3 +382,10 @@ window.refreshAll = refreshAll;
 window.logTranche = logTranche;
 window.resetLog = resetLog;
 window.toggleExplainer = toggleExplainer;
+// ------------------------------
+// AUTO‑REFRESH EVERY 15 MINUTES
+// ------------------------------
+setInterval(() => {
+  console.log("Auto‑refresh triggered");
+  refreshAll();
+}, 15 * 60 * 1000); // 15 minutes
