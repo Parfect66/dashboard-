@@ -238,3 +238,21 @@ button.danger {
   font-size: 11px;
   color: #7c82a0;
 }
+.confidence, .regime, .drift {
+  margin-top: 6px;
+  font-size: 15px;
+  color: #dfe3f0;
+}
+
+.drift span {
+  font-weight: bold;
+}
+.confidence, .regime, .drift {
+  margin-top: 6px;
+  font-size: 15px;
+  color: #dfe3f0;
+}
+
+.drift span {
+  font-weight: bold;
+}
