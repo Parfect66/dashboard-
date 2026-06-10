@@ -1,9 +1,12 @@
 // FINNHUB KEY
+// WARNING: this key is shipped to the browser and visible to anyone via devtools/network tab.
+// Do not reuse this key for anything beyond this free-tier quote dashboard, and rotate it
+// periodically. For real protection, proxy these requests through a backend that holds the key.
 const FINNHUB_KEY = 'd8k39o9r01qjgd6qtjvgd8k39o9r01qjgd6qtk00';
 
 const state = { macro: null, breadth: null, vol: null };
 let missingSymbols = [];
-let prevFxPrice = null;
+let prevFxPrice = parseFloat(localStorage.getItem('prevFxPrice')) || null;
 
 // ------------------------------
 // UI HELPERS
@@ -96,7 +99,6 @@ async function fetchMacroBlock() {
   const fx = await getFx();
 
   if (!ief) {
-    missingSymbols.push('IEF');
     state.macro = null;
     return;
   }
@@ -108,7 +110,7 @@ async function fetchMacroBlock() {
 
   let yieldTrend = 'flat';
   if (change > 0.15) yieldTrend = 'rising';
-  if (change < -0.15) yieldTrend = 'falling';
+  else if (change < -0.15) yieldTrend = 'falling';
 
   document.getElementById('iefValue').textContent = current.toFixed(2);
   document.getElementById('iefChange').textContent =
@@ -128,6 +130,7 @@ async function fetchMacroBlock() {
     else usdJpyTrend = 'stable';
 
     prevFxPrice = fx.price;
+    localStorage.setItem('prevFxPrice', String(prevFxPrice));
 
     document.getElementById('usdJpyText').textContent = fx.price.toFixed(3);
     document.getElementById('fxSource').textContent = `Source: ${fx.source}`;
@@ -202,7 +205,7 @@ async function fetchVolBlock() {
     const change = current - prev;
 
     if (change < -0.5) vixRegime = 'falling';
-    if (change > 0.5) vixRegime = 'rising';
+    else if (change > 0.5) vixRegime = 'rising';
 
     document.getElementById('vixyValue').textContent = current.toFixed(2);
     document.getElementById('vixyChange').textContent =
@@ -323,8 +326,13 @@ function evaluateSignals() {
 
   // ------------------------------
   // SIGNAL DRIFT (with colour coding)
-// ------------------------------
-  const prev = JSON.parse(localStorage.getItem('signalScores') || '{}');
+  // ------------------------------
+  let prev = {};
+  try {
+    prev = JSON.parse(localStorage.getItem('signalScores') || '{}');
+  } catch {
+    prev = {};
+  }
 
   const drift = {
     macro: macroScore - (prev.macroScore || 0),
@@ -394,8 +402,16 @@ function setStatus(prefix, fired) {
 // ------------------------------
 // LOGGING
 // ------------------------------
+function getTrancheLog() {
+  try {
+    return JSON.parse(localStorage.getItem('trancheLog') || '[]');
+  } catch {
+    return [];
+  }
+}
+
 function logTranche(n) {
-  const log = JSON.parse(localStorage.getItem('trancheLog') || '[]');
+  const log = getTrancheLog();
   log.push({ tranche: n, time: new Date().toLocaleString() });
   localStorage.setItem('trancheLog', JSON.stringify(log));
   renderLog();
@@ -407,7 +423,7 @@ function resetLog() {
 }
 
 function renderLog() {
-  const log = JSON.parse(localStorage.getItem('trancheLog') || '[]');
+  const log = getTrancheLog();
   const box = document.getElementById('logBox');
 
   if (log.length === 0) {
