@@ -1,249 +1,135 @@
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #0b1020;
-  color: #f5f5f5;
-  margin: 0;
-  padding: 20px;
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Daily Signal Monitor – Finnhub Only</title>
+  <link rel="stylesheet" href="style.css">
+</head>
 
-.container {
-  max-width: 1100px;
-  margin: 0 auto;
-}
+<body>
+<div class="container">
+  <h1>Daily Signal Monitor – Finnhub Only</h1>
+  <p class="subtitle">
+    Fully automated daily signal engine using Finnhub quotes + exchangerate.host FX.
+  </p>
 
-h1 {
-  margin: 0 0 10px;
-}
+  <div class="section-title">Today’s status</div>
+  <div class="confidence">
+  <strong>Confidence:</strong> <span id="confidenceScore">–</span>
+</div>
 
-.subtitle {
-  color: #a3a9c4;
-  font-size: 13px;
-  margin-bottom: 20px;
-}
+<div class="regime">
+  <strong>Regime:</strong> <span id="regimeText">–</span>
+</div>
 
-.section-title {
-  margin-top: 24px;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #8f95b5;
-}
+  <div class="summary" id="summaryBox">
+    <span>Macro: <strong id="macroStatusText">WAIT</strong></span>
+    <span>Breadth: <strong id="breadthStatusText">WAIT</strong></span>
+    <span>Volatility: <strong id="volStatusText">WAIT</strong></span>
+    <span class="pill pill-wait" id="trancheAdvice">No tranche unlocked</span>
+    <span class="small" id="lastUpdated"></span>
+    <div class="error" id="errorBox"></div>
+  </div>
 
-.summary {
-  background: #151a2c;
-  border-radius: 10px;
-  padding: 14px 16px;
-  border: 1px solid #252b42;
-  margin-top: 12px;
-  font-size: 14px;
-}
+<div class="drift">
+  <strong>Signal Drift:</strong> <span id="signalDrift">–</span>
+</div>
 
-.summary span {
-  display: inline-block;
-  margin-right: 10px;
-}
+  <div class="grid">
 
-.pill {
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  border: 1px solid #3a4060;
-}
+    <!-- MACRO -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="tag tag-macro">Macro stabilisation</div>
+          <h3>Signal 1 – Unlock Tranche 1 (£150–200k)</h3>
+        </div>
+        <div id="macroStatusBadge" class="status status-wait">WAIT</div>
+      </div>
 
-.pill-ok {
-  color: #b9ffcf;
-  border-color: #2f7a4a;
-}
+      <div class="metric-row"><div class="metric-label">US 7–10y proxy (IEF)</div><div class="metric-value" id="iefValue">–</div></div>
+      <div class="data-source" id="iefSource">Source: –</div>
 
-.pill-risk {
-  color: #ffd1b3;
-  border-color: #a85a2f;
-}
+      <div class="metric-row"><div class="metric-label">Daily change</div><div class="metric-value" id="iefChange">–</div></div>
+      <div class="metric-row"><div class="metric-label">Yield trend (derived)</div><div class="metric-value" id="yieldTrendText">–</div></div>
 
-.pill-wait {
-  color: #ffb3b3;
-  border-color: #a83f3f;
-}
+      <div class="metric-row"><div class="metric-label">USD vs JPY (FX)</div><div class="metric-value" id="usdJpyText">–</div></div>
+      <div class="data-source" id="fxSource">Source: –</div>
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-  margin-top: 20px;
-}
+      <div class="explainer-toggle" onclick="toggleExplainer('macroExplainer')">▼ Why Macro = WAIT / FIRED</div>
+      <div class="explainer-content" id="macroExplainer"></div>
 
-.card {
-  background: #151a2c;
-  border-radius: 10px;
-  padding: 16px 18px;
-  border: 1px solid #252b42;
-}
+      <p class="note">Macro = FIRED when IEF is flat/rising and USD/JPY is not in a sharp USD surge.</p>
+    </div>
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
+    <!-- BREADTH -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="tag tag-breadth">Breadth confirmation</div>
+          <h3>Signal 2 – Unlock Tranche 2 (£150–200k)</h3>
+        </div>
+        <div id="breadthStatusBadge" class="status status-wait">WAIT</div>
+      </div>
 
-.tag {
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
+      <div class="metric-row"><div class="metric-label">Semis breadth (SOXX vs XSD)</div><div class="metric-value" id="semisBreadthText">–</div></div>
+      <div class="data-source" id="semisSource">Source: –</div>
 
-.tag-macro {
-  background: #1b3b5a;
-  color: #9fd0ff;
-}
+      <div class="metric-row"><div class="metric-label">China tech proxy (KWEB)</div><div class="metric-value" id="chinaTechText">–</div></div>
+      <div class="data-source" id="kwebSource">Source: –</div>
 
-.tag-breadth {
-  background: #2b3b1b;
-  color: #c6ff9f;
-}
+      <div class="explainer-toggle" onclick="toggleExplainer('breadthExplainer')">▼ Why Breadth = WAIT / FIRED</div>
+      <div class="explainer-content" id="breadthExplainer"></div>
 
-.tag-vol {
-  background: #5a2b1b;
-  color: #ffc79f;
-}
+      <p class="note">Breadth = FIRED when XSD outperforms SOXX and China tech is not weak.</p>
+    </div>
 
-.status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
+    <!-- VOLATILITY -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="tag tag-vol">Volatility crush</div>
+          <h3>Signal 3 – Unlock Tranche 3 (£150–200k)</h3>
+        </div>
+        <div id="volStatusBadge" class="status status-wait">WAIT</div>
+      </div>
 
-.status-wait {
-  background: #3a2b2b;
-  color: #ffb3b3;
-}
+      <div class="metric-row"><div class="metric-label">VIX proxy (VIXY)</div><div class="metric-value" id="vixyValue">–</div></div>
+      <div class="data-source" id="vixySource">Source: –</div>
 
-.status-fired {
-  background: #1f3a2b;
-  color: #b9ffcf;
-}
+      <div class="metric-row"><div class="metric-label">Daily change</div><div class="metric-value" id="vixyChange">–</div></div>
+      <div class="metric-row"><div class="metric-label">VIX regime (derived)</div><div class="metric-value" id="vixRegimeText">–</div></div>
 
-.metric-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  margin: 2px 0;
-}
+      <div class="metric-row"><div class="metric-label">EM proxy (EEM)</div><div class="metric-value" id="eemText">–</div></div>
+      <div class="data-source" id="eemSource">Source: –</div>
 
-.metric-label {
-  color: #a3a9c4;
-}
+      <div class="explainer-toggle" onclick="toggleExplainer('volExplainer')">▼ Why Volatility = WAIT / FIRED</div>
+      <div class="explainer-content" id="volExplainer"></div>
 
-.metric-value {
-  font-weight: 600;
-}
+      <p class="note">Volatility = FIRED when VIXY is falling/low and EEM is not falling.</p>
+    </div>
 
-.data-source {
-  font-size: 11px;
-  color: #7c82a0;
-  margin-top: 2px;
-}
+  </div>
 
-.note {
-  font-size: 12px;
-  color: #9aa0c0;
-  margin-top: 6px;
-}
+  <div class="section-title">Refresh & diagnostics</div>
+  <button onclick="refreshAll()">Refresh now</button>
+  <button onclick="testApiKeys()">Test API keys</button>
+  <div id="apiStatus"></div>
 
-.explainer-toggle {
-  cursor: pointer;
-  font-size: 12px;
-  color: #9aa0c0;
-  margin-top: 8px;
-  user-select: none;
-}
+  <div class="section-title">Position log</div>
+  <div class="log-box" id="logBox"></div>
 
-.explainer-content {
-  display: none;
-  margin-top: 8px;
-  padding: 10px;
-  background: #1b2038;
-  border-radius: 8px;
-  border: 1px solid #2a3048;
-  font-size: 13px;
-}
+  <button onclick="logTranche(1)">Record Tranche 1</button>
+  <button onclick="logTranche(2)">Record Tranche 2</button>
+  <button onclick="logTranche(3)">Record Tranche 3</button>
+  <button onclick="resetLog()" class="danger">Reset Log</button>
 
-button {
-  background: #2f5bff;
-  border: none;
-  border-radius: 999px;
-  padding: 6px 14px;
-  color: #fff;
-  font-size: 12px;
-  cursor: pointer;
-  margin-top: 8px;
-  margin-right: 6px;
-}
+  <div class="footer">
+    Logic: Tranche 1 (macro) → Tranche 2 (breadth) → Tranche 3 (volatility).  
+    Max £550k in high‑beta funds to protect your £1.045m floor.
+  </div>
+</div>
 
-button:hover {
-  background: #2446c4;
-}
-
-button.danger {
-  background: #a83f3f;
-}
-
-.log-box {
-  background: #151a2c;
-  border: 1px solid #252b42;
-  border-radius: 10px;
-  padding: 14px;
-  margin-top: 12px;
-  font-size: 13px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.log-entry {
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #2a3048;
-}
-
-.small {
-  font-size: 11px;
-  color: #7c82a0;
-}
-
-.error {
-  color: #ffb3b3;
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-#apiStatus {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #9aa0c0;
-  white-space: pre-line;
-}
-
-.ok {
-  color: #b9ffcf;
-}
-
-.fail {
-  color: #ffb3b3;
-}
-
-.footer {
-  margin-top: 30px;
-  font-size: 11px;
-  color: #7c82a0;
-}
-.confidence, .regime, .drift {
-  margin-top: 6px;
-  font-size: 15px;
-  color: #dfe3f0;
-}
-
-.drift span {
-  font-weight: bold;
-}
+<script type="module" src="app.mjs"></script>
+</body>
+</html>
