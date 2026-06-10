@@ -65,25 +65,25 @@ async function getQuote(symbol) {
 // FX (2‑source fallback)
 // ------------------------------
 async function getFx() {
-  const primary = `https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6`;
-  const fallback1 = `https://api.exchangerate.host/ecb?base=USD&symbols=JPY`;
+  const primary = 'https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6';
+  const fallback1 = 'https://api.exchangerate.host/ecb?base=USD&symbols=JPY';
 
   try {
     let res = await fetch(primary);
     if (res.ok) {
       let data = await res.json();
-      if (data?.rates?.JPY) return { price: data.rates.JPY, source: "exchangerate.host" };
+      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'exchangerate.host' };
     }
 
     res = await fetch(fallback1);
     if (res.ok) {
       let data = await res.json();
-      if (data?.rates?.JPY) return { price: data.rates.JPY, source: "ECB" };
+      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'ECB' };
     }
 
-    throw new Error("All FX sources failed");
+    throw new Error('All FX sources failed');
   } catch (e) {
-    console.error("FX error:", e);
+    console.error('FX error:', e);
     return null;
   }
 }
@@ -323,7 +323,7 @@ function evaluateSignals() {
 
   // ------------------------------
   // SIGNAL DRIFT (with colour coding)
-  // ------------------------------
+// ------------------------------
   const prev = JSON.parse(localStorage.getItem('signalScores') || '{}');
 
   const drift = {
@@ -345,7 +345,7 @@ function evaluateSignals() {
   let driftHtml = '';
 
   if (driftLeader === 'None') {
-    driftHtml = `<span style="color:#888;">None (cooling)</span>`;
+    driftHtml = '<span style="color:#888;">None (cooling)</span>';
   } else if (driftValue > 0) {
     driftHtml = `<span style="color:#00c853;">${driftLeader} (+${driftValue})</span>`;
   } else {
@@ -433,13 +433,12 @@ async function testApiKeys() {
       fn: () => fetch(`https://finnhub.io/api/v1/quote?symbol=IEF&token=${FINNHUB_KEY}`)
     },
     {
-      name: 'Finnhub
-              name: 'Finnhub quote (VIXY)',
+      name: 'Finnhub quote (VIXY)',
       fn: () => fetch(`https://finnhub.io/api/v1/quote?symbol=VIXY&token=${FINNHUB_KEY}`)
     },
     {
       name: 'FX (USD/JPY via exchangerate.host)',
-      fn: () => fetch(`https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6`)
+      fn: () => fetch('https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6')
     }
   ];
 
@@ -481,6 +480,6 @@ window.toggleExplainer = toggleExplainer;
 // AUTO‑REFRESH EVERY 15 MINUTES
 // ------------------------------
 setInterval(() => {
-  console.log("Auto-refresh triggered");
+  console.log('Auto-refresh triggered');
   refreshAll();
 }, 15 * 60 * 1000);
