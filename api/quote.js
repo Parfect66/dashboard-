@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   const { symbol } = req.query;
 
-  const allowed = ['IEF', 'SOXX', 'XSD', 'KWEB', 'VIXY', 'EEM'];
+  const allowed = ['GLD', 'GDX', 'TIP', 'UUP', 'VIXY', 'XLE', 'DBC', 'CPER', 'SPY'];
   if (!allowed.includes(symbol)) {
     return res.status(400).json({ error: 'Invalid symbol' });
   }

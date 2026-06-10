@@ -1,6 +1,24 @@
-const state = { macro: null, breadth: null, vol: null };
-let missingSymbols = [];
-let prevFxPrice = parseFloat(localStorage.getItem('prevFxPrice')) || null;
+// ------------------------------
+// CONFIG
+// ------------------------------
+const SYMBOLS = ['GLD', 'GDX', 'TIP', 'UUP', 'VIXY', 'XLE', 'DBC', 'CPER', 'SPY'];
+
+const SNAPSHOT_KEY = 'goldDash_snapshot';
+const SCORES_KEY = 'goldDash_scores';
+const LOG_KEY = 'goldDash_log';
+
+// % move (since last check-in) needed before a driver is treated as
+// "rising" / "falling" rather than "stable"
+const THRESH = {
+  TIP: 1.5,
+  UUP: 1.5,
+  VIXY: 8,
+  RATIO: 2,
+  DBC: 2,
+  XLE: 2,
+  CPER: 2,
+  SPY: 2
+};
 
 // ------------------------------
 // UI HELPERS
@@ -14,419 +32,346 @@ function setError(msg) {
   document.getElementById('errorBox').textContent = msg || '';
 }
 
+function setBadge(id, kind, text) {
+  const badge = document.getElementById(id);
+  badge.textContent = text;
+  badge.className = 'status status-' + kind;
+}
+
+function setScoreMarker(id, score) {
+  const marker = document.getElementById(id);
+  marker.style.left = `${Math.max(0, Math.min(100, score))}%`;
+}
+
+function fmtPct(pct) {
+  if (pct === null || pct === undefined) return 'n/a';
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+}
+
+function fmtPP(pct) {
+  if (pct === null || pct === undefined) return 'n/a';
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}pp`;
+}
+
+function fmtPrice(price, pct) {
+  const pctStr = pct === null || pct === undefined ? '' : ` (${fmtPct(pct)})`;
+  return `${price.toFixed(2)}${pctStr}`;
+}
+
+function pctChange(current, previous) {
+  if (!previous) return null;
+  return ((current - previous) / previous) * 100;
+}
+
+function scoreFromChange(pct, threshold, risingScore, fallingScore, stableScore = 50) {
+  if (pct > threshold) return risingScore;
+  if (pct < -threshold) return fallingScore;
+  return stableScore;
+}
+
+// ------------------------------
+// QUOTES (via /api/quote proxy)
+// ------------------------------
+async function fetchQuote(symbol) {
+  try {
+    const res = await fetch(`/api/quote?symbol=${symbol}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data || typeof data.c !== 'number' || data.c === 0) throw new Error('Invalid quote');
+    return data.c;
+  } catch {
+    return null;
+  }
+}
+
 // ------------------------------
 // REFRESH ALL
 // ------------------------------
 async function refreshAll() {
   setError('');
-  missingSymbols = [];
-  state.macro = null;
-  state.breadth = null;
-  state.vol = null;
 
-  await Promise.all([
-    fetchMacroBlock(),
-    fetchBreadthBlock(),
-    fetchVolBlock()
-  ]);
+  const prices = {};
+  const missing = [];
 
-  evaluateSignals();
-  document.getElementById('lastUpdated').textContent =
-    'Last updated: ' + new Date().toLocaleString();
-}
-
-// ------------------------------
-// FINNHUB QUOTES
-// ------------------------------
-async function fetchFinnhubQuote(symbol) {
-  const url = `/api/quote?symbol=${symbol}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (!data || typeof data.c !== 'number') throw new Error('Invalid quote');
-    return { price: data.c, previousClose: data.pc };
-  } catch {
-    return null;
-  }
-}
-
-async function getQuote(symbol) {
-  const q = await fetchFinnhubQuote(symbol);
-  if (q) return q;
-  missingSymbols.push(symbol);
-  return null;
-}
-
-// ------------------------------
-// FX (2‑source fallback)
-// ------------------------------
-async function getFx() {
-  const primary = 'https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6';
-  const fallback1 = 'https://api.exchangerate.host/ecb?base=USD&symbols=JPY';
-
-  try {
-    let res = await fetch(primary);
-    if (res.ok) {
-      let data = await res.json();
-      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'exchangerate.host' };
-    }
-
-    res = await fetch(fallback1);
-    if (res.ok) {
-      let data = await res.json();
-      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'ECB' };
-    }
-
-    throw new Error('All FX sources failed');
-  } catch (e) {
-    console.error('FX error:', e);
-    return null;
-  }
-}
-
-// ------------------------------
-// MACRO BLOCK (strict)
-// ------------------------------
-async function fetchMacroBlock() {
-  const ief = await getQuote('IEF');
-  const fx = await getFx();
-
-  if (!ief) {
-    state.macro = null;
-    return;
-  }
-
-  const current = ief.price;
-  const prev = ief.previousClose;
-  const change = current - prev;
-  const pct = (change / prev) * 100;
-
-  let yieldTrend = 'flat';
-  if (change > 0.15) yieldTrend = 'rising';
-  else if (change < -0.15) yieldTrend = 'falling';
-
-  document.getElementById('iefValue').textContent = current.toFixed(2);
-  document.getElementById('iefChange').textContent =
-    `${change >= 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)`;
-  document.getElementById('yieldTrendText').textContent = yieldTrend;
-  document.getElementById('iefSource').textContent = 'Source: Finnhub';
-
-  let usdJpyTrend = 'missing';
-
-  if (fx && fx.price) {
-    if (prevFxPrice === null) prevFxPrice = fx.price;
-
-    const diff = fx.price - prevFxPrice;
-
-    if (diff > 0.3) usdJpyTrend = 'usdSurging';
-    else if (diff < -0.3) usdJpyTrend = 'usdFalling';
-    else usdJpyTrend = 'stable';
-
-    prevFxPrice = fx.price;
-    localStorage.setItem('prevFxPrice', String(prevFxPrice));
-
-    document.getElementById('usdJpyText').textContent = fx.price.toFixed(3);
-    document.getElementById('fxSource').textContent = `Source: ${fx.source}`;
-  } else {
-    document.getElementById('usdJpyText').textContent = 'n/a';
-    document.getElementById('fxSource').textContent = 'Source: unavailable';
-  }
-
-  state.macro = { yieldTrend, usdJpyTrend };
-
-  document.getElementById('macroExplainer').innerHTML = `
-    <div><strong>Yield trend:</strong> ${yieldTrend}</div>
-    <div><strong>USD/JPY trend:</strong> ${usdJpyTrend}</div>
-  `;
-}
-
-// ------------------------------
-// BREADTH BLOCK (strict)
-// ------------------------------
-async function fetchBreadthBlock() {
-  const soxx = await getQuote('SOXX');
-  const xsd = await getQuote('XSD');
-  const kweb = await getQuote('KWEB');
-
-  let semisBreadth = 'neutral';
-  if (soxx && xsd && soxx.previousClose && xsd.previousClose) {
-    const soxxRet = (soxx.price - soxx.previousClose) / soxx.previousClose;
-    const xsdRet = (xsd.price - xsd.previousClose) / xsd.previousClose;
-    const diff = xsdRet - soxxRet;
-
-    if (diff > 0.005) semisBreadth = 'equalOutperform';
-    else if (diff < -0.005) semisBreadth = 'equalUnderperform';
-  } else {
-    missingSymbols.push('SOXX/XSD');
-  }
-
-  document.getElementById('semisBreadthText').textContent = semisBreadth;
-  document.getElementById('semisSource').textContent = 'Source: Finnhub';
-
-  let chinaTech = 'sideways';
-  if (kweb && kweb.previousClose) {
-    const ret = (kweb.price - kweb.previousClose) / kweb.previousClose;
-    if (ret > 0.01) chinaTech = 'recovering';
-    else if (ret < -0.01) chinaTech = 'weak';
-  } else {
-    missingSymbols.push('KWEB');
-  }
-
-  document.getElementById('chinaTechText').textContent = chinaTech;
-  document.getElementById('kwebSource').textContent = 'Source: Finnhub';
-
-  state.breadth = { semisBreadth, chinaTech };
-
-  document.getElementById('breadthExplainer').innerHTML = `
-    <div><strong>Semis breadth:</strong> ${semisBreadth}</div>
-    <div><strong>China tech:</strong> ${chinaTech}</div>
-  `;
-}
-
-// ------------------------------
-// VOL BLOCK (strict)
-// ------------------------------
-async function fetchVolBlock() {
-  const vixy = await getQuote('VIXY');
-  const eem = await getQuote('EEM');
-
-  let vixRegime = 'near';
-
-  if (vixy && vixy.previousClose) {
-    const current = vixy.price;
-    const prev = vixy.previousClose;
-    const change = current - prev;
-
-    if (change < -0.5) vixRegime = 'falling';
-    else if (change > 0.5) vixRegime = 'rising';
-
-    document.getElementById('vixyValue').textContent = current.toFixed(2);
-    document.getElementById('vixyChange').textContent =
-      `${change >= 0 ? '+' : ''}${change.toFixed(2)}`;
-    document.getElementById('vixRegimeText').textContent = vixRegime;
-  } else {
-    document.getElementById('vixyValue').textContent = 'n/a';
-    document.getElementById('vixyChange').textContent = 'n/a';
-    document.getElementById('vixRegimeText').textContent = 'unknown';
-    missingSymbols.push('VIXY');
-  }
-
-  document.getElementById('vixySource').textContent = 'Source: Finnhub';
-
-  let eemTrend = 'flat';
-  if (eem && eem.previousClose) {
-    const ret = (eem.price - eem.previousClose) / eem.previousClose;
-    if (ret > 0.007) eemTrend = 'rising';
-    else if (ret < -0.007) eemTrend = 'falling';
-  } else {
-    missingSymbols.push('EEM');
-  }
-
-  document.getElementById('eemText').textContent = eemTrend;
-  document.getElementById('eemSource').textContent = 'Source: Finnhub';
-
-  state.vol = { vixRegime, eemTrend };
-
-  document.getElementById('volExplainer').innerHTML = `
-    <div><strong>VIXY trend:</strong> ${vixRegime}</div>
-    <div><strong>EEM trend:</strong> ${eemTrend}</div>
-  `;
-}
-
-// ------------------------------
-// EVALUATE SIGNALS (strict + scoring + drift)
-// ------------------------------
-function evaluateSignals() {
-  const coreMissing = missingSymbols.filter(s =>
-    ['IEF', 'SOXX/XSD', 'KWEB', 'VIXY', 'EEM'].includes(s)
-  );
-
-  if (!state.macro || !state.breadth || !state.vol || coreMissing.length > 0) {
-    setStatus('macro', false);
-    setStatus('breadth', false);
-    setStatus('vol', false);
-
-    document.getElementById('macroStatusText').textContent = 'WAIT';
-    document.getElementById('breadthStatusText').textContent = 'WAIT';
-    document.getElementById('volStatusText').textContent = 'WAIT';
-
-    const advice = document.getElementById('trancheAdvice');
-    advice.textContent = 'Data incomplete — no signals today';
-    advice.className = 'pill pill-wait';
-
-    if (coreMissing.length > 0) {
-      setError('Missing data for: ' + [...new Set(coreMissing)].join(', '));
-    } else {
-      setError('Some data did not load — signals disabled.');
-    }
-    return;
-  }
-
-  const macro = state.macro;
-  const breadth = state.breadth;
-  const vol = state.vol;
-
-  // STRICT SIGNALS
-  const macroFired =
-    macro.yieldTrend === 'falling' &&
-    (macro.usdJpyTrend === 'stable' || macro.usdJpyTrend === 'usdFalling');
-
-  const breadthFired =
-    breadth.semisBreadth === 'equalOutperform' &&
-    breadth.chinaTech === 'recovering';
-
-  const volFired =
-    vol.vixRegime === 'falling' &&
-    vol.eemTrend === 'rising';
-
-  setStatus('macro', macroFired);
-  setStatus('breadth', breadthFired);
-  setStatus('vol', volFired);
-
-  document.getElementById('macroStatusText').textContent = macroFired ? 'FIRED' : 'WAIT';
-  document.getElementById('breadthStatusText').textContent = breadthFired ? 'FIRED' : 'WAIT';
-  document.getElementById('volStatusText').textContent = volFired ? 'FIRED' : 'WAIT';
-
-  // ------------------------------
-  // CONFIDENCE SCORING
-  // ------------------------------
-  let macroScore = 0;
-  if (macroFired) macroScore = 100;
-  else if (macro.yieldTrend === 'falling') macroScore = 60;
-  else if (macro.yieldTrend === 'flat' && macro.usdJpyTrend === 'stable') macroScore = 30;
-
-  let breadthScore = 0;
-  if (breadthFired) breadthScore = 100;
-  else if (breadth.semisBreadth === 'equalOutperform' || breadth.chinaTech === 'recovering')
-    breadthScore = 50;
-
-  let volScore = 0;
-  if (volFired) volScore = 100;
-  else if (vol.vixRegime === 'falling' && vol.eemTrend === 'flat') volScore = 50;
-
-  const confidenceScore = Math.round((macroScore + breadthScore + volScore) / 3);
-
-  document.getElementById('confidenceScore').textContent = confidenceScore + '%';
-
-  // ------------------------------
-  // REGIME CLASSIFICATION
-  // ------------------------------
-  let regime = 'Risk-Off';
-  if (confidenceScore >= 70) regime = 'Risk-On';
-  else if (confidenceScore >= 40) regime = 'Neutral';
-
-  document.getElementById('regimeText').textContent = regime;
-
-  // ------------------------------
-  // SIGNAL DRIFT (with colour coding)
-// ------------------------------
-  let prev = {};
-  try {
-    prev = JSON.parse(localStorage.getItem('signalScores') || '{}');
-  } catch {
-    prev = {};
-  }
-
-  const drift = {
-    macro: macroScore - (prev.macroScore || 0),
-    breadth: breadthScore - (prev.breadthScore || 0),
-    vol: volScore - (prev.volScore || 0)
-  };
-
-  let driftLeader = 'None';
-  let driftValue = 0;
-
-  for (const key of ['macro', 'breadth', 'vol']) {
-    if (drift[key] > driftValue) {
-      driftLeader = key;
-      driftValue = drift[key];
-    }
-  }
-
-  let driftHtml = '';
-
-  if (driftLeader === 'None') {
-    driftHtml = '<span style="color:#888;">None (cooling)</span>';
-  } else if (driftValue > 0) {
-    driftHtml = `<span style="color:#00c853;">${driftLeader} (+${driftValue})</span>`;
-  } else {
-    driftHtml = `<span style="color:#d50000;">${driftLeader} (${driftValue})</span>`;
-  }
-
-  document.getElementById('signalDrift').innerHTML = driftHtml;
-
-  localStorage.setItem('signalScores', JSON.stringify({
-    macroScore,
-    breadthScore,
-    volScore
+  await Promise.all(SYMBOLS.map(async sym => {
+    const price = await fetchQuote(sym);
+    if (price === null) missing.push(sym);
+    else prices[sym] = price;
   }));
 
-  // ------------------------------
-  // TRANCHE ADVICE
-  // ------------------------------
-  const advice = document.getElementById('trancheAdvice');
-
-  if (!macroFired && !breadthFired && !volFired) {
-    advice.textContent = 'No tranche unlocked – stay defensive';
-    advice.className = 'pill pill-wait';
-  } else if (macroFired && !breadthFired && !volFired) {
-    advice.textContent = 'Tranche 1 unlocked – £150–200k into Asia';
-    advice.className = 'pill pill-ok';
-  } else if (macroFired && breadthFired && !volFired) {
-    advice.textContent = 'Tranche 1 + 2 unlocked – up to ~£400k deployed';
-    advice.className = 'pill pill-ok';
-  } else if (macroFired && breadthFired && volFired) {
-    advice.textContent = 'All 3 tranches unlocked – up to £550k growth sleeve available';
-    advice.className = 'pill pill-ok';
-  } else {
-    advice.textContent = 'Signals mixed – size smaller than usual';
-    advice.className = 'pill pill-risk';
+  if (missing.length > 0) {
+    setError('Missing data for: ' + missing.join(', '));
+    return;
   }
 
-  setError('');
-}
-
-function setStatus(prefix, fired) {
-  const badge = document.getElementById(prefix + 'StatusBadge');
-  badge.textContent = fired ? 'FIRED' : 'WAIT';
-  badge.className = fired ? 'status status-fired' : 'status status-wait';
-}
-
-// ------------------------------
-// LOGGING
-// ------------------------------
-function getTrancheLog() {
+  let stored = null;
   try {
-    return JSON.parse(localStorage.getItem('trancheLog') || '[]');
+    stored = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || 'null');
+  } catch {
+    stored = null;
+  }
+
+  const prev = stored ? stored.prices : null;
+  const changes = {};
+  SYMBOLS.forEach(sym => {
+    changes[sym] = prev ? pctChange(prices[sym], prev[sym]) : null;
+  });
+
+  document.getElementById('gldValue').textContent = fmtPrice(prices.GLD, changes.GLD);
+  document.getElementById('gdxValue').textContent = fmtPrice(prices.GDX, changes.GDX);
+  document.getElementById('tipValue').textContent = fmtPrice(prices.TIP, changes.TIP);
+  document.getElementById('uupValue').textContent = fmtPrice(prices.UUP, changes.UUP);
+  document.getElementById('vixyValue').textContent = fmtPrice(prices.VIXY, changes.VIXY);
+  document.getElementById('dbcValue').textContent = fmtPrice(prices.DBC, changes.DBC);
+  document.getElementById('xleValue').textContent = fmtPrice(prices.XLE, changes.XLE);
+  document.getElementById('cperValue').textContent = fmtPrice(prices.CPER, changes.CPER);
+  document.getElementById('spyValue').textContent = fmtPrice(prices.SPY, changes.SPY);
+
+  document.getElementById('lastChecked').textContent =
+    'Last checked: ' + new Date().toLocaleString();
+  document.getElementById('comparedTo').textContent = stored
+    ? 'Comparing to: ' + new Date(stored.date).toLocaleString()
+    : 'First check-in — baseline set. Refresh again later to see trend signals.';
+
+  if (!stored) {
+    setBaselineUI();
+  } else {
+    evaluateGold(changes);
+    evaluateNR(changes);
+  }
+
+  localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ date: new Date().toISOString(), prices }));
+}
+
+function setBaselineUI() {
+  document.getElementById('goldScore').textContent = '–';
+  document.getElementById('goldDrift').textContent = '–';
+  setBadge('goldRegimeBadge', 'neutral', 'BASELINE');
+  setScoreMarker('goldScoreMarker', 50);
+  document.getElementById('goldAdvice').textContent =
+    'Baseline set — refresh again later (e.g. next month) to see directional signals.';
+  document.getElementById('goldExplainer').innerHTML = '';
+
+  document.getElementById('nrScore').textContent = '–';
+  document.getElementById('nrDrift').textContent = '–';
+  setBadge('nrRegimeBadge', 'neutral', 'BASELINE');
+  setScoreMarker('nrScoreMarker', 50);
+  document.getElementById('nrAdvice').textContent =
+    'Baseline set — refresh again later (e.g. next month) to see directional signals.';
+  document.getElementById('nrExplainer').innerHTML = '';
+}
+
+// ------------------------------
+// GOLD / MINING SIGNAL (BlackRock Gold & General)
+// ------------------------------
+function evaluateGold(changes) {
+  // Real yields proxy: TIP rising = real yields falling = bullish gold
+  const realYieldScore = scoreFromChange(changes.TIP, THRESH.TIP, 100, 0);
+  const realYieldLabel = changes.TIP > THRESH.TIP
+    ? 'Real yields likely falling (bullish for gold)'
+    : changes.TIP < -THRESH.TIP
+      ? 'Real yields likely rising (bearish for gold)'
+      : 'Real yields broadly stable';
+
+  // USD: UUP falling = USD weakening = bullish gold
+  const usdScore = scoreFromChange(changes.UUP, THRESH.UUP, 0, 100);
+  const usdLabel = changes.UUP > THRESH.UUP
+    ? 'USD strengthening (headwind for gold)'
+    : changes.UUP < -THRESH.UUP
+      ? 'USD weakening (tailwind for gold)'
+      : 'USD broadly stable';
+
+  // Risk sentiment: VIXY rising = risk-off = safe-haven bid for gold
+  const riskScore = scoreFromChange(changes.VIXY, THRESH.VIXY, 100, 30);
+  const riskLabel = changes.VIXY > THRESH.VIXY
+    ? 'Risk-off move — safe-haven demand likely supportive of gold'
+    : changes.VIXY < -THRESH.VIXY
+      ? 'Risk-on move — less safe-haven demand for gold'
+      : 'Risk sentiment broadly stable';
+
+  // Mining leverage: GDX outperforming GLD + falling energy costs = favourable operating leverage
+  const ratioDiff = changes.GDX - changes.GLD;
+  let miningScore = 50;
+  let miningLabel = 'Mining equity leverage mixed vs gold price';
+  if (ratioDiff > THRESH.RATIO && changes.XLE < 0) {
+    miningScore = 100;
+    miningLabel = 'Miners outperforming gold with falling energy costs (favourable operating leverage)';
+  } else if (ratioDiff < -THRESH.RATIO && changes.XLE > 0) {
+    miningScore = 0;
+    miningLabel = 'Miners lagging gold with rising energy costs (unfavourable operating leverage)';
+  }
+
+  const goldScore = Math.round(
+    realYieldScore * 0.30 +
+    usdScore * 0.25 +
+    riskScore * 0.15 +
+    miningScore * 0.30
+  );
+
+  document.getElementById('goldScore').textContent = goldScore + '/100';
+  setScoreMarker('goldScoreMarker', goldScore);
+
+  let regimeKind, regimeText, advice;
+  if (goldScore >= 65) {
+    regimeKind = 'fired';
+    regimeText = 'ADD';
+    advice = 'Tailwinds favourable — consider increasing allocation to BlackRock Gold & General.';
+  } else if (goldScore >= 35) {
+    regimeKind = 'neutral';
+    regimeText = 'HOLD';
+    advice = 'Mixed signals — hold current allocation.';
+  } else {
+    regimeKind = 'risk';
+    regimeText = 'TRIM';
+    advice = 'Headwinds dominant — consider trimming allocation to BlackRock Gold & General.';
+  }
+
+  setBadge('goldRegimeBadge', regimeKind, regimeText);
+  document.getElementById('goldAdvice').textContent = advice;
+
+  document.getElementById('goldExplainer').innerHTML = `
+    <div><strong>Real yields (TIP):</strong> ${fmtPct(changes.TIP)} — ${realYieldLabel}</div>
+    <div><strong>USD (UUP):</strong> ${fmtPct(changes.UUP)} — ${usdLabel}</div>
+    <div><strong>Risk sentiment (VIXY):</strong> ${fmtPct(changes.VIXY)} — ${riskLabel}</div>
+    <div><strong>Mining leverage (GDX vs GLD):</strong> ${fmtPP(ratioDiff)}, energy ${fmtPct(changes.XLE)} — ${miningLabel}</div>
+  `;
+
+  renderDrift('goldDrift', goldScore, 'goldScore');
+}
+
+// ------------------------------
+// NATURAL RESOURCES SIGNAL (JPM Natural Resources)
+// ------------------------------
+function evaluateNR(changes) {
+  const commodityScore = scoreFromChange(changes.DBC, THRESH.DBC, 100, 0);
+  const commodityLabel = changes.DBC > THRESH.DBC
+    ? 'Broad commodities rising (tailwind)'
+    : changes.DBC < -THRESH.DBC
+      ? 'Broad commodities falling (headwind)'
+      : 'Broad commodities broadly stable';
+
+  const energyScore = scoreFromChange(changes.XLE, THRESH.XLE, 100, 0);
+  const energyLabel = changes.XLE > THRESH.XLE
+    ? 'Energy prices rising (tailwind)'
+    : changes.XLE < -THRESH.XLE
+      ? 'Energy prices falling (headwind)'
+      : 'Energy prices broadly stable';
+
+  const metalsScore = scoreFromChange(changes.CPER, THRESH.CPER, 100, 0);
+  const metalsLabel = changes.CPER > THRESH.CPER
+    ? 'Industrial metals rising — demand/growth picking up (tailwind)'
+    : changes.CPER < -THRESH.CPER
+      ? 'Industrial metals falling — demand/growth softening (headwind)'
+      : 'Industrial metals broadly stable';
+
+  const equityScore = scoreFromChange(changes.SPY, THRESH.SPY, 100, 0);
+  const equityLabel = changes.SPY > THRESH.SPY
+    ? 'Broad equities rising — supportive risk appetite'
+    : changes.SPY < -THRESH.SPY
+      ? 'Broad equities falling — risk appetite weak'
+      : 'Broad equities broadly stable';
+
+  const nrScore = Math.round(
+    commodityScore * 0.35 +
+    energyScore * 0.25 +
+    metalsScore * 0.20 +
+    equityScore * 0.20
+  );
+
+  document.getElementById('nrScore').textContent = nrScore + '/100';
+  setScoreMarker('nrScoreMarker', nrScore);
+
+  let regimeKind, regimeText, advice;
+  if (nrScore >= 65) {
+    regimeKind = 'fired';
+    regimeText = 'ADD';
+    advice = 'Commodity cycle tailwinds favourable — consider increasing allocation to JPM Natural Resources.';
+  } else if (nrScore >= 35) {
+    regimeKind = 'neutral';
+    regimeText = 'HOLD';
+    advice = 'Mixed signals — hold current allocation.';
+  } else {
+    regimeKind = 'risk';
+    regimeText = 'TRIM';
+    advice = 'Commodity cycle headwinds dominant — consider trimming allocation to JPM Natural Resources.';
+  }
+
+  setBadge('nrRegimeBadge', regimeKind, regimeText);
+  document.getElementById('nrAdvice').textContent = advice;
+
+  document.getElementById('nrExplainer').innerHTML = `
+    <div><strong>Broad commodities (DBC):</strong> ${fmtPct(changes.DBC)} — ${commodityLabel}</div>
+    <div><strong>Energy (XLE):</strong> ${fmtPct(changes.XLE)} — ${energyLabel}</div>
+    <div><strong>Industrial metals (CPER):</strong> ${fmtPct(changes.CPER)} — ${metalsLabel}</div>
+    <div><strong>Equity market (SPY):</strong> ${fmtPct(changes.SPY)} — ${equityLabel}</div>
+  `;
+
+  renderDrift('nrDrift', nrScore, 'nrScore');
+}
+
+// ------------------------------
+// SCORE DRIFT (vs previous check-in)
+// ------------------------------
+function renderDrift(elementId, currentScore, key) {
+  let prevScores = {};
+  try {
+    prevScores = JSON.parse(localStorage.getItem(SCORES_KEY) || '{}');
+  } catch {
+    prevScores = {};
+  }
+
+  const el = document.getElementById(elementId);
+  if (typeof prevScores[key] !== 'number') {
+    el.innerHTML = '<span style="color:#888;">No previous score yet</span>';
+  } else {
+    const diff = currentScore - prevScores[key];
+    if (diff > 0) {
+      el.innerHTML = `<span style="color:#00c853;">+${diff}</span>`;
+    } else if (diff < 0) {
+      el.innerHTML = `<span style="color:#d50000;">${diff}</span>`;
+    } else {
+      el.innerHTML = '<span style="color:#888;">No change</span>';
+    }
+  }
+
+  prevScores[key] = currentScore;
+  localStorage.setItem(SCORES_KEY, JSON.stringify(prevScores));
+}
+
+// ------------------------------
+// POSITION LOG
+// ------------------------------
+function getLog() {
+  try {
+    return JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
   } catch {
     return [];
   }
 }
 
-function logTranche(n) {
-  const log = getTrancheLog();
-  log.push({ tranche: n, time: new Date().toLocaleString() });
-  localStorage.setItem('trancheLog', JSON.stringify(log));
+function logAction(action) {
+  const log = getLog();
+  log.push({ action, time: new Date().toLocaleString() });
+  localStorage.setItem(LOG_KEY, JSON.stringify(log));
   renderLog();
 }
 
 function resetLog() {
-  localStorage.removeItem('trancheLog');
+  localStorage.removeItem(LOG_KEY);
   renderLog();
 }
 
 function renderLog() {
-  const log = getTrancheLog();
+  const log = getLog();
   const box = document.getElementById('logBox');
 
   if (log.length === 0) {
-    box.innerHTML = '<div style="color:#7c82a0;">No tranches recorded yet.</div>';
+    box.innerHTML = '<div style="color:#7c82a0;">No actions recorded yet.</div>';
     return;
   }
 
   box.innerHTML = log.map(entry =>
-    `<div class="log-entry">Tranche ${entry.tranche} deployed on <strong>${entry.time}</strong></div>`
+    `<div class="log-entry">${entry.action} on <strong>${entry.time}</strong></div>`
   ).join('');
 }
 
@@ -437,28 +382,15 @@ async function testApiKeys() {
   const statusEl = document.getElementById('apiStatus');
   statusEl.textContent = 'Testing…';
 
-  const tests = [
-    {
-      name: 'Finnhub quote (IEF)',
-      fn: () => fetch('/api/quote?symbol=IEF')
-    },
-    {
-      name: 'Finnhub quote (VIXY)',
-      fn: () => fetch('/api/quote?symbol=VIXY')
-    },
-    {
-      name: 'FX (USD/JPY via exchangerate.host)',
-      fn: () => fetch('https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6')
-    }
-  ];
-
-  const results = await Promise.all(tests.map(async t => {
+  const results = await Promise.all(SYMBOLS.map(async sym => {
     try {
-      const res = await t.fn();
+      const res = await fetch(`/api/quote?symbol=${sym}`);
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      return { name: t.name, ok: true };
+      const data = await res.json();
+      if (typeof data.c !== 'number') throw new Error('Invalid quote');
+      return { name: sym, ok: true };
     } catch (e) {
-      return { name: t.name, ok: false, err: e.message };
+      return { name: sym, ok: false, err: e.message };
     }
   }));
 
@@ -480,16 +412,8 @@ async function testApiKeys() {
 renderLog();
 refreshAll();
 
-window.testApiKeys = testApiKeys;
 window.refreshAll = refreshAll;
-window.logTranche = logTranche;
+window.testApiKeys = testApiKeys;
+window.logAction = logAction;
 window.resetLog = resetLog;
 window.toggleExplainer = toggleExplainer;
-
-// ------------------------------
-// AUTO‑REFRESH EVERY 15 MINUTES
-// ------------------------------
-setInterval(() => {
-  console.log('Auto-refresh triggered');
-  refreshAll();
-}, 15 * 60 * 1000);
