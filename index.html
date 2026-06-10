@@ -2,109 +2,131 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Gold & Resources Fund Monitor</title>
+  <title>Daily Signal Monitor – Finnhub Only</title>
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 <div class="container">
-  <h1>Gold & Resources Fund Monitor</h1>
+  <h1>Daily Signal Monitor – Finnhub Only</h1>
   <p class="subtitle">
-    Tracks the key macro drivers behind gold and broad commodities to help time moves
-    into and out of Scottish Widows BlackRock Gold &amp; General and JPM Natural Resources.
-    Designed for monthly / opportunistic check-ins — each refresh compares against your
-    last check-in, not the previous trading day.
+    Fully automated daily signal engine using Finnhub quotes + exchangerate.host FX.
   </p>
 
+  <div class="section-title">Today’s status</div>
+  <div class="confidence">
+  <strong>Confidence:</strong> <span id="confidenceScore">–</span>
+</div>
+
+<div class="regime">
+  <strong>Regime:</strong> <span id="regimeText">–</span>
+</div>
+
   <div class="summary" id="summaryBox">
-    <span class="small" id="lastChecked">Last checked: –</span>
-    <span class="small" id="comparedTo">Comparing to: –</span>
+    <span>Macro: <strong id="macroStatusText">WAIT</strong></span>
+    <span>Breadth: <strong id="breadthStatusText">WAIT</strong></span>
+    <span>Volatility: <strong id="volStatusText">WAIT</strong></span>
+    <span class="pill pill-wait" id="trancheAdvice">No tranche unlocked</span>
+    <span class="small" id="lastUpdated"></span>
     <div class="error" id="errorBox"></div>
   </div>
 
+<div class="drift">
+  <strong>Signal Drift:</strong> <span id="signalDrift">–</span>
+</div>
+
   <div class="grid">
 
-    <!-- GOLD / MINING FUND -->
+    <!-- MACRO -->
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="tag tag-macro">Gold / Mining equity</div>
-          <h3>Scottish Widows BlackRock Gold &amp; General</h3>
+          <div class="tag tag-macro">Macro stabilisation</div>
+          <h3>Signal 1 – Unlock Tranche 1 (£150–200k)</h3>
         </div>
-        <div id="goldRegimeBadge" class="status status-neutral">HOLD</div>
+        <div id="macroStatusBadge" class="status status-wait">WAIT</div>
       </div>
 
-      <div class="confidence"><strong>Gold tailwind score:</strong> <span id="goldScore">–</span></div>
-      <div class="score-bar">
-        <div class="score-bar-track"></div>
-        <div class="score-bar-marker" id="goldScoreMarker"></div>
-      </div>
-      <div class="score-bar-labels"><span>Move out</span><span>Hold</span><span>Move in</span></div>
-      <div class="drift"><strong>Since last check:</strong> <span id="goldDrift">–</span></div>
+      <div class="metric-row"><div class="metric-label">US 7–10y proxy (IEF)</div><div class="metric-value" id="iefValue">–</div></div>
+      <div class="data-source" id="iefSource">Source: –</div>
 
-      <div class="metric-row"><div class="metric-label">Gold price (GLD)</div><div class="metric-value" id="gldValue">–</div></div>
-      <div class="metric-row"><div class="metric-label">Gold miners (GDX)</div><div class="metric-value" id="gdxValue">–</div></div>
-      <div class="metric-row"><div class="metric-label">Real yields proxy (TIP)</div><div class="metric-value" id="tipValue">–</div></div>
-      <div class="metric-row"><div class="metric-label">USD strength (UUP)</div><div class="metric-value" id="uupValue">–</div></div>
-      <div class="metric-row"><div class="metric-label">Risk sentiment (VIXY)</div><div class="metric-value" id="vixyValue">–</div></div>
-      <div class="data-source" id="goldSource">Source: Finnhub (via proxy)</div>
+      <div class="metric-row"><div class="metric-label">Daily change</div><div class="metric-value" id="iefChange">–</div></div>
+      <div class="metric-row"><div class="metric-label">Yield trend (derived)</div><div class="metric-value" id="yieldTrendText">–</div></div>
 
-      <div class="explainer-toggle" onclick="toggleExplainer('goldExplainer')">▼ Why this score?</div>
-      <div class="explainer-content" id="goldExplainer"></div>
+      <div class="metric-row"><div class="metric-label">USD vs JPY (FX)</div><div class="metric-value" id="usdJpyText">–</div></div>
+      <div class="data-source" id="fxSource">Source: –</div>
 
-      <p class="note" id="goldAdvice">Set a baseline first — refresh again later to see trend signals.</p>
+      <div class="explainer-toggle" onclick="toggleExplainer('macroExplainer')">▼ Why Macro = WAIT / FIRED</div>
+      <div class="explainer-content" id="macroExplainer"></div>
+
+      <p class="note">Macro = FIRED when IEF is flat/rising and USD/JPY is not in a sharp USD surge.</p>
     </div>
 
-    <!-- NATURAL RESOURCES FUND -->
+    <!-- BREADTH -->
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="tag tag-breadth">Broad commodities</div>
-          <h3>Scottish Widows JPM Natural Resources</h3>
+          <div class="tag tag-breadth">Breadth confirmation</div>
+          <h3>Signal 2 – Unlock Tranche 2 (£150–200k)</h3>
         </div>
-        <div id="nrRegimeBadge" class="status status-neutral">HOLD</div>
+        <div id="breadthStatusBadge" class="status status-wait">WAIT</div>
       </div>
 
-      <div class="confidence"><strong>Resources tailwind score:</strong> <span id="nrScore">–</span></div>
-      <div class="score-bar">
-        <div class="score-bar-track"></div>
-        <div class="score-bar-marker" id="nrScoreMarker"></div>
+      <div class="metric-row"><div class="metric-label">Semis breadth (SOXX vs XSD)</div><div class="metric-value" id="semisBreadthText">–</div></div>
+      <div class="data-source" id="semisSource">Source: –</div>
+
+      <div class="metric-row"><div class="metric-label">China tech proxy (KWEB)</div><div class="metric-value" id="chinaTechText">–</div></div>
+      <div class="data-source" id="kwebSource">Source: –</div>
+
+      <div class="explainer-toggle" onclick="toggleExplainer('breadthExplainer')">▼ Why Breadth = WAIT / FIRED</div>
+      <div class="explainer-content" id="breadthExplainer"></div>
+
+      <p class="note">Breadth = FIRED when XSD outperforms SOXX and China tech is not weak.</p>
+    </div>
+
+    <!-- VOLATILITY -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="tag tag-vol">Volatility crush</div>
+          <h3>Signal 3 – Unlock Tranche 3 (£150–200k)</h3>
+        </div>
+        <div id="volStatusBadge" class="status status-wait">WAIT</div>
       </div>
-      <div class="score-bar-labels"><span>Move out</span><span>Hold</span><span>Move in</span></div>
-      <div class="drift"><strong>Since last check:</strong> <span id="nrDrift">–</span></div>
 
-      <div class="metric-row"><div class="metric-label">Broad commodities (DBC)</div><div class="metric-value" id="dbcValue">–</div></div>
-      <div class="metric-row"><div class="metric-label">Energy (XLE)</div><div class="metric-value" id="xleValue">–</div></div>
-      <div class="metric-row"><div class="metric-label">Industrial metals (CPER)</div><div class="metric-value" id="cperValue">–</div></div>
-      <div class="metric-row"><div class="metric-label">Equity market (SPY)</div><div class="metric-value" id="spyValue">–</div></div>
-      <div class="data-source" id="nrSource">Source: Finnhub (via proxy)</div>
+      <div class="metric-row"><div class="metric-label">VIX proxy (VIXY)</div><div class="metric-value" id="vixyValue">–</div></div>
+      <div class="data-source" id="vixySource">Source: –</div>
 
-      <div class="explainer-toggle" onclick="toggleExplainer('nrExplainer')">▼ Why this score?</div>
-      <div class="explainer-content" id="nrExplainer"></div>
+      <div class="metric-row"><div class="metric-label">Daily change</div><div class="metric-value" id="vixyChange">–</div></div>
+      <div class="metric-row"><div class="metric-label">VIX regime (derived)</div><div class="metric-value" id="vixRegimeText">–</div></div>
 
-      <p class="note" id="nrAdvice">Set a baseline first — refresh again later to see trend signals.</p>
+      <div class="metric-row"><div class="metric-label">EM proxy (EEM)</div><div class="metric-value" id="eemText">–</div></div>
+      <div class="data-source" id="eemSource">Source: –</div>
+
+      <div class="explainer-toggle" onclick="toggleExplainer('volExplainer')">▼ Why Volatility = WAIT / FIRED</div>
+      <div class="explainer-content" id="volExplainer"></div>
+
+      <p class="note">Volatility = FIRED when VIXY is falling/low and EEM is not falling.</p>
     </div>
 
   </div>
 
   <div class="section-title">Refresh & diagnostics</div>
-  <button onclick="refreshAll()">Update snapshot</button>
+  <button onclick="refreshAll()">Refresh now</button>
   <button onclick="testApiKeys()">Test API keys</button>
   <div id="apiStatus"></div>
 
   <div class="section-title">Position log</div>
   <div class="log-box" id="logBox"></div>
 
-  <button onclick="logAction('Increased Gold (BlackRock)')">Log: Increased Gold</button>
-  <button onclick="logAction('Reduced Gold (BlackRock)')">Log: Reduced Gold</button>
-  <button onclick="logAction('Increased Natural Resources (JPM)')">Log: Increased NR</button>
-  <button onclick="logAction('Reduced Natural Resources (JPM)')">Log: Reduced NR</button>
+  <button onclick="logTranche(1)">Record Tranche 1</button>
+  <button onclick="logTranche(2)">Record Tranche 2</button>
+  <button onclick="logTranche(3)">Record Tranche 3</button>
   <button onclick="resetLog()" class="danger">Reset Log</button>
 
   <div class="footer">
-    Recommended check frequency: monthly. Scores reflect directional tailwinds since your
-    last check-in (real yields, USD strength, risk sentiment, mining cost/leverage,
-    broad commodity cycle), not absolute valuation. Not financial advice.
+    Logic: Tranche 1 (macro) → Tranche 2 (breadth) → Tranche 3 (volatility).  
+    Max £550k in high‑beta funds to protect your £1.045m floor.
   </div>
 </div>
 
