@@ -1,9 +1,3 @@
-// FINNHUB KEY
-// WARNING: this key is shipped to the browser and visible to anyone via devtools/network tab.
-// Do not reuse this key for anything beyond this free-tier quote dashboard, and rotate it
-// periodically. For real protection, proxy these requests through a backend that holds the key.
-const FINNHUB_KEY = 'd8k39o9r01qjgd6qtjvgd8k39o9r01qjgd6qtk00';
-
 const state = { macro: null, breadth: null, vol: null };
 let missingSymbols = [];
 let prevFxPrice = parseFloat(localStorage.getItem('prevFxPrice')) || null;
@@ -45,7 +39,7 @@ async function refreshAll() {
 // FINNHUB QUOTES
 // ------------------------------
 async function fetchFinnhubQuote(symbol) {
-  const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`;
+  const url = `/api/quote?symbol=${symbol}`;
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -326,7 +320,7 @@ function evaluateSignals() {
 
   // ------------------------------
   // SIGNAL DRIFT (with colour coding)
-  // ------------------------------
+// ------------------------------
   let prev = {};
   try {
     prev = JSON.parse(localStorage.getItem('signalScores') || '{}');
@@ -446,11 +440,11 @@ async function testApiKeys() {
   const tests = [
     {
       name: 'Finnhub quote (IEF)',
-      fn: () => fetch(`https://finnhub.io/api/v1/quote?symbol=IEF&token=${FINNHUB_KEY}`)
+      fn: () => fetch('/api/quote?symbol=IEF')
     },
     {
       name: 'Finnhub quote (VIXY)',
-      fn: () => fetch(`https://finnhub.io/api/v1/quote?symbol=VIXY&token=${FINNHUB_KEY}`)
+      fn: () => fetch('/api/quote?symbol=VIXY')
     },
     {
       name: 'FX (USD/JPY via exchangerate.host)',
