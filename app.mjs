@@ -46,10 +46,25 @@ async function fetchFinnhubQuote(symbol) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (!data || typeof data.c !== 'number') throw new Error('Invalid quote');
-    return { price: data.c, previousClose: data.pc };
+    return { price: data.c, previousClose: data.pc, timestamp: data.t };
   } catch {
     return null;
   }
+}
+
+// Returns a human-readable freshness label for a Finnhub quote timestamp.
+function freshnessLabel(timestamp) {
+  if (!timestamp) return 'unknown';
+  const ageMs = Date.now() - timestamp * 1000;
+  const ageMin = ageMs / 60000;
+
+  if (ageMin < 30) return 'live (US session)';
+
+  const ageHrs = ageMin / 60;
+  if (ageHrs < 24) return `${ageHrs.toFixed(1)}h ago (last US close)`;
+
+  const ageDays = ageHrs / 24;
+  return `${ageDays.toFixed(1)}d ago (stale)`;
 }
 
 async function getQuote(symbol) {
@@ -150,34 +165,42 @@ async function fetchBreadthBlock() {
   const ewy = await getQuote('EWY'); // iShares Korea
 
   let ewtTrend = 'flat';
+  let ewtPct = null;
   if (ewt && ewt.previousClose) {
     const ret = (ewt.price - ewt.previousClose) / ewt.previousClose;
+    ewtPct = ret * 100;
     if (ret > 0.003) ewtTrend = 'rising';
     else if (ret < -0.003) ewtTrend = 'falling';
   } else {
     missingSymbols.push('EWT');
   }
 
-  document.getElementById('ewtTrendText').textContent = ewtTrend;
-  document.getElementById('ewtSource').textContent = 'Source: Finnhub';
+  document.getElementById('ewtTrendText').textContent =
+    ewtPct !== null ? `${ewtTrend} (${ewtPct >= 0 ? '+' : ''}${ewtPct.toFixed(2)}%)` : ewtTrend;
+  document.getElementById('ewtSource').textContent =
+    `Source: Finnhub – ${freshnessLabel(ewt?.timestamp)}`;
 
   let ewyTrend = 'flat';
+  let ewyPct = null;
   if (ewy && ewy.previousClose) {
     const ret = (ewy.price - ewy.previousClose) / ewy.previousClose;
+    ewyPct = ret * 100;
     if (ret > 0.003) ewyTrend = 'rising';
     else if (ret < -0.003) ewyTrend = 'falling';
   } else {
     missingSymbols.push('EWY');
   }
 
-  document.getElementById('ewyTrendText').textContent = ewyTrend;
-  document.getElementById('ewySource').textContent = 'Source: Finnhub';
+  document.getElementById('ewyTrendText').textContent =
+    ewyPct !== null ? `${ewyTrend} (${ewyPct >= 0 ? '+' : ''}${ewyPct.toFixed(2)}%)` : ewyTrend;
+  document.getElementById('ewySource').textContent =
+    `Source: Finnhub – ${freshnessLabel(ewy?.timestamp)}`;
 
   state.breadth = { ewtTrend, ewyTrend };
 
   document.getElementById('breadthExplainer').innerHTML = `
-    <div><strong>Taiwan (EWT) trend:</strong> ${ewtTrend}</div>
-    <div><strong>Korea (EWY) trend:</strong> ${ewyTrend}</div>
+    <div><strong>Taiwan (EWT) trend:</strong> ${ewtTrend}${ewtPct !== null ? ` (${ewtPct >= 0 ? '+' : ''}${ewtPct.toFixed(2)}%)` : ''}</div>
+    <div><strong>Korea (EWY) trend:</strong> ${ewyTrend}${ewyPct !== null ? ` (${ewyPct >= 0 ? '+' : ''}${ewyPct.toFixed(2)}%)` : ''}</div>
   `;
 }
 
@@ -212,22 +235,26 @@ async function fetchVolBlock() {
   document.getElementById('vixySource').textContent = 'Source: Finnhub';
 
   let tsmTrend = 'flat';
+  let tsmPct = null;
   if (tsm && tsm.previousClose) {
     const ret = (tsm.price - tsm.previousClose) / tsm.previousClose;
+    tsmPct = ret * 100;
     if (ret > 0.007) tsmTrend = 'rising';
     else if (ret < -0.007) tsmTrend = 'falling';
   } else {
     missingSymbols.push('TSM');
   }
 
-  document.getElementById('tsmText').textContent = tsmTrend;
-  document.getElementById('tsmSource').textContent = 'Source: Finnhub';
+  document.getElementById('tsmText').textContent =
+    tsmPct !== null ? `${tsmTrend} (${tsmPct >= 0 ? '+' : ''}${tsmPct.toFixed(2)}%)` : tsmTrend;
+  document.getElementById('tsmSource').textContent =
+    `Source: Finnhub – ${freshnessLabel(tsm?.timestamp)}`;
 
   state.vol = { vixRegime, tsmTrend };
 
   document.getElementById('volExplainer').innerHTML = `
     <div><strong>VIXY trend:</strong> ${vixRegime}</div>
-    <div><strong>TSMC (TSM) trend:</strong> ${tsmTrend}</div>
+    <div><strong>TSMC (TSM) trend:</strong> ${tsmTrend}${tsmPct !== null ? ` (${tsmPct >= 0 ? '+' : ''}${tsmPct.toFixed(2)}%)` : ''}</div>
   `;
 }
 
