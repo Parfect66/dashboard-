@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Daily Signal Monitor – Finnhub Only</title>
+  <title>Veritas Asian Re-entry Monitor</title>
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 <div class="container">
-  <h1>Daily Signal Monitor – Finnhub Only</h1>
+  <h1>Veritas Asian Re-entry Monitor</h1>
   <p class="subtitle">
-    Fully automated daily signal engine using Finnhub quotes + exchangerate.host FX.
+    Watching for confirmation to re-enter SW Veritas Asian (Taiwan/Korea chip-heavy).
+    Uses Finnhub quotes + exchangerate.host FX.
   </p>
 
   <div class="section-title">Today’s status</div>
@@ -43,7 +44,7 @@
       <div class="card-header">
         <div>
           <div class="tag tag-macro">Macro stabilisation</div>
-          <h3>Signal 1 – Unlock Tranche 1 (£150–200k)</h3>
+          <h3>Signal 1 – Tranche 1 confirmation</h3>
         </div>
         <div id="macroStatusBadge" class="status status-wait">WAIT</div>
       </div>
@@ -67,22 +68,22 @@
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="tag tag-breadth">Breadth confirmation</div>
-          <h3>Signal 2 – Unlock Tranche 2 (£150–200k)</h3>
+          <div class="tag tag-breadth">Asia chip breadth</div>
+          <h3>Signal 2 – Tranche 2 confirmation</h3>
         </div>
         <div id="breadthStatusBadge" class="status status-wait">WAIT</div>
       </div>
 
-      <div class="metric-row"><div class="metric-label">Semis breadth (SOXX vs XSD)</div><div class="metric-value" id="semisBreadthText">–</div></div>
-      <div class="data-source" id="semisSource">Source: –</div>
+      <div class="metric-row"><div class="metric-label">Taiwan (EWT)</div><div class="metric-value" id="ewtTrendText">–</div></div>
+      <div class="data-source" id="ewtSource">Source: –</div>
 
-      <div class="metric-row"><div class="metric-label">China tech proxy (KWEB)</div><div class="metric-value" id="chinaTechText">–</div></div>
-      <div class="data-source" id="kwebSource">Source: –</div>
+      <div class="metric-row"><div class="metric-label">Korea (EWY)</div><div class="metric-value" id="ewyTrendText">–</div></div>
+      <div class="data-source" id="ewySource">Source: –</div>
 
       <div class="explainer-toggle" onclick="toggleExplainer('breadthExplainer')">▼ Why Breadth = WAIT / FIRED</div>
       <div class="explainer-content" id="breadthExplainer"></div>
 
-      <p class="note">Breadth = FIRED when XSD outperforms SOXX and China tech is not weak.</p>
+      <p class="note">Breadth = FIRED when both Taiwan (EWT) and Korea (EWY) are rising – Veritas Asian is ~62.5% Taiwan + Korea, so this confirms a broad-based recovery, not a single-stock bounce.</p>
     </div>
 
     <!-- VOLATILITY -->
@@ -90,7 +91,7 @@
       <div class="card-header">
         <div>
           <div class="tag tag-vol">Volatility crush</div>
-          <h3>Signal 3 – Unlock Tranche 3 (£150–200k)</h3>
+          <h3>Signal 3 – Tranche 3 confirmation</h3>
         </div>
         <div id="volStatusBadge" class="status status-wait">WAIT</div>
       </div>
@@ -101,13 +102,13 @@
       <div class="metric-row"><div class="metric-label">Daily change</div><div class="metric-value" id="vixyChange">–</div></div>
       <div class="metric-row"><div class="metric-label">VIX regime (derived)</div><div class="metric-value" id="vixRegimeText">–</div></div>
 
-      <div class="metric-row"><div class="metric-label">EM proxy (EEM)</div><div class="metric-value" id="eemText">–</div></div>
-      <div class="data-source" id="eemSource">Source: –</div>
+      <div class="metric-row"><div class="metric-label">TSMC (TSM, largest holding)</div><div class="metric-value" id="tsmText">–</div></div>
+      <div class="data-source" id="tsmSource">Source: –</div>
 
       <div class="explainer-toggle" onclick="toggleExplainer('volExplainer')">▼ Why Volatility = WAIT / FIRED</div>
       <div class="explainer-content" id="volExplainer"></div>
 
-      <p class="note">Volatility = FIRED when VIXY is falling/low and EEM is not falling.</p>
+      <p class="note">Volatility = FIRED when VIXY is falling/low and TSMC (the fund's single largest holding at 9.7%) is rising.</p>
     </div>
 
   </div>
@@ -117,17 +118,19 @@
   <button onclick="testApiKeys()">Test API keys</button>
   <div id="apiStatus"></div>
 
-  <div class="section-title">Position log</div>
+  <div class="section-title">Re-entry log</div>
   <div class="log-box" id="logBox"></div>
 
-  <button onclick="logTranche(1)">Record Tranche 1</button>
-  <button onclick="logTranche(2)">Record Tranche 2</button>
-  <button onclick="logTranche(3)">Record Tranche 3</button>
+  <button onclick="logTranche(1)">Record Tranche 1 re-entry</button>
+  <button onclick="logTranche(2)">Record Tranche 2 re-entry</button>
+  <button onclick="logTranche(3)">Record Tranche 3 (full) re-entry</button>
   <button onclick="resetLog()" class="danger">Reset Log</button>
 
   <div class="footer">
-    Logic: Tranche 1 (macro) → Tranche 2 (breadth) → Tranche 3 (volatility).  
-    Max £550k in high‑beta funds to protect your £1.045m floor.
+    Logic: Tranche 1 (macro stabilises) → Tranche 2 (Taiwan + Korea both recovering)
+    → Tranche 3 (vol crush + TSMC confirms). Designed to re-enter SW Veritas Asian
+    in stages once the AI-capex/memory-chip selloff has genuinely turned, rather than
+    on a single-day bounce.
   </div>
 </div>
 

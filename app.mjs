@@ -142,54 +142,50 @@ async function fetchMacroBlock() {
 }
 
 // ------------------------------
-// BREADTH BLOCK (strict)
+// BREADTH BLOCK (strict) – Taiwan + Korea (Veritas Asian core, ~62.5% of fund)
 // ------------------------------
 async function fetchBreadthBlock() {
-  const soxx = await getQuote('SOXX');
-  const xsd = await getQuote('XSD');
-  const kweb = await getQuote('KWEB');
+  const ewt = await getQuote('EWT'); // iShares Taiwan
+  const ewy = await getQuote('EWY'); // iShares Korea
 
-  let semisBreadth = 'neutral';
-  if (soxx && xsd && soxx.previousClose && xsd.previousClose) {
-    const soxxRet = (soxx.price - soxx.previousClose) / soxx.previousClose;
-    const xsdRet = (xsd.price - xsd.previousClose) / xsd.previousClose;
-    const diff = xsdRet - soxxRet;
-
-    if (diff > 0.005) semisBreadth = 'equalOutperform';
-    else if (diff < -0.005) semisBreadth = 'equalUnderperform';
+  let ewtTrend = 'flat';
+  if (ewt && ewt.previousClose) {
+    const ret = (ewt.price - ewt.previousClose) / ewt.previousClose;
+    if (ret > 0.003) ewtTrend = 'rising';
+    else if (ret < -0.003) ewtTrend = 'falling';
   } else {
-    missingSymbols.push('SOXX/XSD');
+    missingSymbols.push('EWT');
   }
 
-  document.getElementById('semisBreadthText').textContent = semisBreadth;
-  document.getElementById('semisSource').textContent = 'Source: Finnhub';
+  document.getElementById('ewtTrendText').textContent = ewtTrend;
+  document.getElementById('ewtSource').textContent = 'Source: Finnhub';
 
-  let chinaTech = 'sideways';
-  if (kweb && kweb.previousClose) {
-    const ret = (kweb.price - kweb.previousClose) / kweb.previousClose;
-    if (ret > 0.01) chinaTech = 'recovering';
-    else if (ret < -0.01) chinaTech = 'weak';
+  let ewyTrend = 'flat';
+  if (ewy && ewy.previousClose) {
+    const ret = (ewy.price - ewy.previousClose) / ewy.previousClose;
+    if (ret > 0.003) ewyTrend = 'rising';
+    else if (ret < -0.003) ewyTrend = 'falling';
   } else {
-    missingSymbols.push('KWEB');
+    missingSymbols.push('EWY');
   }
 
-  document.getElementById('chinaTechText').textContent = chinaTech;
-  document.getElementById('kwebSource').textContent = 'Source: Finnhub';
+  document.getElementById('ewyTrendText').textContent = ewyTrend;
+  document.getElementById('ewySource').textContent = 'Source: Finnhub';
 
-  state.breadth = { semisBreadth, chinaTech };
+  state.breadth = { ewtTrend, ewyTrend };
 
   document.getElementById('breadthExplainer').innerHTML = `
-    <div><strong>Semis breadth:</strong> ${semisBreadth}</div>
-    <div><strong>China tech:</strong> ${chinaTech}</div>
+    <div><strong>Taiwan (EWT) trend:</strong> ${ewtTrend}</div>
+    <div><strong>Korea (EWY) trend:</strong> ${ewyTrend}</div>
   `;
 }
 
 // ------------------------------
-// VOL BLOCK (strict)
+// VOL BLOCK (strict) – vol regime + TSMC (fund's largest single holding)
 // ------------------------------
 async function fetchVolBlock() {
   const vixy = await getQuote('VIXY');
-  const eem = await getQuote('EEM');
+  const tsm = await getQuote('TSM');
 
   let vixRegime = 'near';
 
@@ -214,23 +210,23 @@ async function fetchVolBlock() {
 
   document.getElementById('vixySource').textContent = 'Source: Finnhub';
 
-  let eemTrend = 'flat';
-  if (eem && eem.previousClose) {
-    const ret = (eem.price - eem.previousClose) / eem.previousClose;
-    if (ret > 0.007) eemTrend = 'rising';
-    else if (ret < -0.007) eemTrend = 'falling';
+  let tsmTrend = 'flat';
+  if (tsm && tsm.previousClose) {
+    const ret = (tsm.price - tsm.previousClose) / tsm.previousClose;
+    if (ret > 0.007) tsmTrend = 'rising';
+    else if (ret < -0.007) tsmTrend = 'falling';
   } else {
-    missingSymbols.push('EEM');
+    missingSymbols.push('TSM');
   }
 
-  document.getElementById('eemText').textContent = eemTrend;
-  document.getElementById('eemSource').textContent = 'Source: Finnhub';
+  document.getElementById('tsmText').textContent = tsmTrend;
+  document.getElementById('tsmSource').textContent = 'Source: Finnhub';
 
-  state.vol = { vixRegime, eemTrend };
+  state.vol = { vixRegime, tsmTrend };
 
   document.getElementById('volExplainer').innerHTML = `
     <div><strong>VIXY trend:</strong> ${vixRegime}</div>
-    <div><strong>EEM trend:</strong> ${eemTrend}</div>
+    <div><strong>TSMC (TSM) trend:</strong> ${tsmTrend}</div>
   `;
 }
 
@@ -239,7 +235,7 @@ async function fetchVolBlock() {
 // ------------------------------
 function evaluateSignals() {
   const coreMissing = missingSymbols.filter(s =>
-    ['IEF', 'SOXX/XSD', 'KWEB', 'VIXY', 'EEM'].includes(s)
+    ['IEF', 'EWT', 'EWY', 'VIXY', 'TSM'].includes(s)
   );
 
   if (!state.macro || !state.breadth || !state.vol || coreMissing.length > 0) {
@@ -273,12 +269,12 @@ function evaluateSignals() {
     (macro.usdJpyTrend === 'stable' || macro.usdJpyTrend === 'usdFalling');
 
   const breadthFired =
-    breadth.semisBreadth === 'equalOutperform' &&
-    breadth.chinaTech === 'recovering';
+    breadth.ewtTrend === 'rising' &&
+    breadth.ewyTrend === 'rising';
 
   const volFired =
     vol.vixRegime === 'falling' &&
-    vol.eemTrend === 'rising';
+    vol.tsmTrend === 'rising';
 
   setStatus('macro', macroFired);
   setStatus('breadth', breadthFired);
@@ -298,12 +294,12 @@ function evaluateSignals() {
 
   let breadthScore = 0;
   if (breadthFired) breadthScore = 100;
-  else if (breadth.semisBreadth === 'equalOutperform' || breadth.chinaTech === 'recovering')
+  else if (breadth.ewtTrend === 'rising' || breadth.ewyTrend === 'rising')
     breadthScore = 50;
 
   let volScore = 0;
   if (volFired) volScore = 100;
-  else if (vol.vixRegime === 'falling' && vol.eemTrend === 'flat') volScore = 50;
+  else if (vol.vixRegime === 'falling' && vol.tsmTrend === 'flat') volScore = 50;
 
   const confidenceScore = Math.round((macroScore + breadthScore + volScore) / 3);
 
@@ -368,19 +364,19 @@ function evaluateSignals() {
   const advice = document.getElementById('trancheAdvice');
 
   if (!macroFired && !breadthFired && !volFired) {
-    advice.textContent = 'No tranche unlocked – stay defensive';
+    advice.textContent = 'Stay out – no re-entry signal yet';
     advice.className = 'pill pill-wait';
   } else if (macroFired && !breadthFired && !volFired) {
-    advice.textContent = 'Tranche 1 unlocked – £150–200k into Asia';
+    advice.textContent = 'Tranche 1 – macro stabilising, watch closely';
     advice.className = 'pill pill-ok';
   } else if (macroFired && breadthFired && !volFired) {
-    advice.textContent = 'Tranche 1 + 2 unlocked – up to ~£400k deployed';
+    advice.textContent = 'Tranche 1 + 2 – Taiwan & Korea both recovering, consider partial re-entry';
     advice.className = 'pill pill-ok';
   } else if (macroFired && breadthFired && volFired) {
-    advice.textContent = 'All 3 tranches unlocked – up to £550k growth sleeve available';
+    advice.textContent = 'All 3 confirmed – broad-based recovery, full re-entry into Veritas Asian';
     advice.className = 'pill pill-ok';
   } else {
-    advice.textContent = 'Signals mixed – size smaller than usual';
+    advice.textContent = 'Signals mixed – wait for confirmation before re-entering';
     advice.className = 'pill pill-risk';
   }
 
@@ -426,7 +422,7 @@ function renderLog() {
   }
 
   box.innerHTML = log.map(entry =>
-    `<div class="log-entry">Tranche ${entry.tranche} deployed on <strong>${entry.time}</strong></div>`
+    `<div class="log-entry">Tranche ${entry.tranche} re-entry recorded on <strong>${entry.time}</strong></div>`
   ).join('');
 }
 
@@ -445,6 +441,18 @@ async function testApiKeys() {
     {
       name: 'Finnhub quote (VIXY)',
       fn: () => fetch('/api/quote?symbol=VIXY')
+    },
+    {
+      name: 'Finnhub quote (EWT)',
+      fn: () => fetch('/api/quote?symbol=EWT')
+    },
+    {
+      name: 'Finnhub quote (EWY)',
+      fn: () => fetch('/api/quote?symbol=EWY')
+    },
+    {
+      name: 'Finnhub quote (TSM)',
+      fn: () => fetch('/api/quote?symbol=TSM')
     },
     {
       name: 'FX (USD/JPY via exchangerate.host)',
