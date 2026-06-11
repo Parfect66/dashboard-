@@ -78,20 +78,20 @@ async function getQuote(symbol) {
 // FX (2‑source fallback)
 // ------------------------------
 async function getFx() {
-  const primary = 'https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6';
-  const fallback1 = 'https://api.exchangerate.host/ecb?base=USD&symbols=JPY';
+  const primary = 'https://open.er-api.com/v6/latest/USD';
+  const fallback1 = 'https://api.frankfurter.dev/v1/latest?from=USD&to=JPY';
 
   try {
     let res = await fetch(primary);
     if (res.ok) {
       let data = await res.json();
-      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'exchangerate.host' };
+      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'open.er-api.com' };
     }
 
     res = await fetch(fallback1);
     if (res.ok) {
       let data = await res.json();
-      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'ECB' };
+      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'Frankfurter (ECB)' };
     }
 
     throw new Error('All FX sources failed');
@@ -532,8 +532,8 @@ async function testApiKeys() {
       fn: () => fetch('/api/quote?symbol=TSM')
     },
     {
-      name: 'FX (USD/JPY via exchangerate.host)',
-      fn: () => fetch('https://api.exchangerate.host/latest?base=USD&symbols=JPY&places=6')
+      name: 'FX (USD/JPY via open.er-api.com)',
+      fn: () => fetch('https://open.er-api.com/v6/latest/USD')
     }
   ];
 
