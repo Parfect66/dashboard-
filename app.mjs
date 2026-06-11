@@ -78,22 +78,11 @@ async function getQuote(symbol) {
 // FX (2‑source fallback)
 // ------------------------------
 async function getFx() {
-  const primary = 'https://open.er-api.com/v6/latest/USD';
-  const fallback1 = 'https://api.frankfurter.dev/v1/latest?from=USD&to=JPY';
-
   try {
-    let res = await fetch(primary);
-    if (res.ok) {
-      let data = await res.json();
-      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'open.er-api.com' };
-    }
-
-    res = await fetch(fallback1);
-    if (res.ok) {
-      let data = await res.json();
-      if (data?.rates?.JPY) return { price: data.rates.JPY, source: 'Frankfurter (ECB)' };
-    }
-
+    const res = await fetch('/api/fx');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data?.price) return { price: data.price, source: data.source };
     throw new Error('All FX sources failed');
   } catch (e) {
     console.error('FX error:', e);
