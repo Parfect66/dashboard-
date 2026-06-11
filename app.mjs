@@ -27,7 +27,8 @@ async function refreshAll() {
   await Promise.all([
     fetchMacroBlock(),
     fetchBreadthBlock(),
-    fetchVolBlock()
+    fetchVolBlock(),
+    fetchEarningsBlock()
   ]);
 
   evaluateSignals();
@@ -228,6 +229,52 @@ async function fetchVolBlock() {
     <div><strong>VIXY trend:</strong> ${vixRegime}</div>
     <div><strong>TSMC (TSM) trend:</strong> ${tsmTrend}</div>
   `;
+}
+
+// ------------------------------
+// EARNINGS CALENDAR – top holdings (TSMC, Samsung, SK Hynix)
+// ------------------------------
+async function fetchEarningsBlock() {
+  const watchlist = [
+    { symbol: 'TSM', name: 'TSMC' },
+    { symbol: '005930.KS', name: 'Samsung Electronics' },
+    { symbol: '000660.KS', name: 'SK Hynix' }
+  ];
+
+  const today = new Date();
+  const from = today.toISOString().slice(0, 10);
+  const toDate = new Date(today);
+  toDate.setDate(toDate.getDate() + 60);
+  const to = toDate.toISOString().slice(0, 10);
+
+  const results = await Promise.all(watchlist.map(async ({ symbol, name }) => {
+    try {
+      const res = await fetch(`/api/earnings?symbol=${symbol}&from=${from}&to=${to}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const events = (data.earningsCalendar || [])
+        .filter(e => e.date >= from)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      return { name, symbol, date: events[0]?.date || null };
+    } catch {
+      return { name, symbol, date: null, error: true };
+    }
+  }));
+
+  const box = document.getElementById('earningsBox');
+  if (!box) return;
+
+  box.innerHTML = results.map(r => {
+    if (!r.date) {
+      const label = r.error ? 'unavailable' : 'no upcoming date found';
+      return `<div class="earnings-row">${r.name} (${r.symbol}): <span style="color:#888;">${label}</span></div>`;
+    }
+    const days = Math.ceil((new Date(r.date) - today) / (1000 * 60 * 60 * 24));
+    const soon = days <= 7;
+    const style = soon ? 'color:#d50000;font-weight:bold;' : 'color:#00c853;';
+    const warning = soon ? ' ⚠ within 7 days – consider waiting before re-entry' : '';
+    return `<div class="earnings-row">${r.name} (${r.symbol}): <span style="${style}">${r.date} (${days}d)${warning}</span></div>`;
+  }).join('');
 }
 
 // ------------------------------
