@@ -134,16 +134,19 @@ async function fetchMacroBlock() {
     if (prevFxPrice === null) prevFxPrice = fx.price;
 
     const diff = fx.price - prevFxPrice;
+    const fxPct = (diff / prevFxPrice) * 100;
 
     if (diff > 0.3) usdJpyTrend = 'usdSurging';
     else if (diff < -0.3) usdJpyTrend = 'usdFalling';
     else usdJpyTrend = 'stable';
 
+    document.getElementById('usdJpyText').textContent =
+      `${fx.price.toFixed(3)} (${diff >= 0 ? '+' : ''}${diff.toFixed(3)}, ${fxPct >= 0 ? '+' : ''}${fxPct.toFixed(2)}%)`;
+    document.getElementById('fxSource').textContent =
+      `Source: ${fx.source} – change since last check`;
+
     prevFxPrice = fx.price;
     localStorage.setItem('prevFxPrice', String(prevFxPrice));
-
-    document.getElementById('usdJpyText').textContent = fx.price.toFixed(3);
-    document.getElementById('fxSource').textContent = `Source: ${fx.source}`;
   } else {
     document.getElementById('usdJpyText').textContent = 'n/a';
     document.getElementById('fxSource').textContent = 'Source: unavailable';
